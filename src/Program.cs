@@ -1,7 +1,9 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using Microsoft.Win32;
 
 static class Program
 {
@@ -23,11 +25,46 @@ static class Program
             return 0;
         }
 
+        if (args.Length == 1 && args[0] == "--install")
+            return Autostart(true);
+        if (args.Length == 1 && args[0] == "--uninstall")
+            return Autostart(false);
+
+        bool first;
+        Mutex single = new Mutex(true, "zmk-hub-display", out first);
+        if (!first)
+            return 0;
+
         int refresh = args.Length == 2 && args[0] == "--refresh" ? int.Parse(args[1]) : 0;
         Timer timer = refresh > 0 ? new Timer(_ => Push(null), null, refresh * 1000, refresh * 1000) : null;
 
         Run();
         GC.KeepAlive(timer);
+        GC.KeepAlive(single);
+        return 0;
+    }
+
+    // Per-user autostart via HKCU Run (no admin needed). Install also starts it now,
+    // uninstall stops running copies.
+    static int Autostart(bool install)
+    {
+        const string key = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        string exe = Process.GetCurrentProcess().MainModule.FileName;
+        using (RegistryKey run = Registry.CurrentUser.OpenSubKey(key, true))
+        {
+            if (install)
+            {
+                run.SetValue("zmk-hub-display", "\"" + exe + "\"");
+                Process.Start(exe);
+            }
+            else
+            {
+                run.DeleteValue("zmk-hub-display", false);
+                foreach (Process p in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exe)))
+                    if (p.Id != Process.GetCurrentProcess().Id)
+                        p.Kill();
+            }
+        }
         return 0;
     }
 
