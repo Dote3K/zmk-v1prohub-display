@@ -62,6 +62,12 @@ sealed class Hub : IDisposable
         return Command(frame, "LIVE,", 4000) == "LIVE,ok";
     }
 
+    // LZ4 frame: mostly-black screens shrink a lot, so transfers are much shorter than raw ones.
+    public bool SendCompressed(byte[] rgb565)
+    {
+        return Command(Lz4.Frame(rgb565), "LIVE,", 4000) == "LIVE,ok";
+    }
+
     public void ExitLive()
     {
         Command(new byte[] { 0xA5, 0x5A, 0x0B, 0, 0, 0, 0, 0 }, "LIVE,", 2500);

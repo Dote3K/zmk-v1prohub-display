@@ -116,7 +116,7 @@ static class Program
             {
                 using (Hub hub = Hub.Open())
                     if (hub != null)
-                        hub.SendFrame(lastFrame);
+                        hub.SendCompressed(lastFrame);
             }
             catch (Win32Exception) { }
         }
