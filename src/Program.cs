@@ -12,6 +12,7 @@ static class Program
 
     static readonly object hubLock = new object();
     static Renderer renderer;
+    static Animator animator;
     static byte[] lastFrame;
 
     static int Main(string[] args)
@@ -38,6 +39,7 @@ static class Program
         int refresh = args.Length == 2 && args[0] == "--refresh" ? int.Parse(args[1]) : 0;
         Timer timer = refresh > 0 ? new Timer(_ => Push(null), null, refresh * 1000, refresh * 1000) : null;
 
+        animator = new Animator(renderer, Push);
         Run();
         GC.KeepAlive(timer);
         GC.KeepAlive(single);
@@ -90,7 +92,7 @@ static class Program
                 {
                     Status s = Status.Parse(dongle.Read());
                     if (s != null)
-                        Push(renderer.Render(s));
+                        animator.Show(s);
                 }
             }
             catch (IOException) { }
