@@ -38,45 +38,73 @@ sealed class Renderer : IDisposable
 
     public byte[] Render(Status s)
     {
+        return Render(View.Settled(s));
+    }
+
+    public byte[] Render(View v)
+    {
         g.Clear(Background);
 
         g.DrawString(keyboard.ToUpperInvariant(), small, Brush(Dim), new RectangleF(10, 2, 200, 22), left);
 
-        string name = s.LayerName.Length > 0 ? s.LayerName : "Layer " + s.Layer;
-        name = name.ToUpperInvariant();
-        g.DrawString(name, FitFont(name), Brushes.White, new RectangleF(0, 24, W, 62), center);
+        // layer name: old one slides out and fades while the new one slides in (up when going to a higher layer)
+        RectangleF nameArea = new RectangleF(0, 24, W, 62);
+        g.SetClip(nameArea);
+        float t = v.LayerT, dir = v.LayerTo >= v.LayerFrom ? 1 : -1;
+        if (t >= 1 || v.NameFrom == v.NameTo)
+            DrawName(v.NameTo, nameArea, 0, 255);
+        else
+        {
+            DrawName(v.NameFrom, nameArea, -dir * NameShift * t, (int)(255 * (1 - t)));
+            DrawName(v.NameTo, nameArea, dir * NameShift * (1 - t), (int)(255 * t));
+        }
+        g.ResetClip();
 
-        int count = Math.Max(3, s.Layer + 1), dot = 14, gap = 6;
+        // layer track with a sliding indicator
+        int count = Math.Max(3, Math.Max(v.LayerFrom, v.LayerTo) + 1), dot = 14, gap = 6;
         int x0 = (W - (count * dot + (count - 1) * gap)) / 2;
         for (int i = 0; i < count; i++)
-            Fill(i == s.Layer ? Accent : Track, x0 + i * (dot + gap), 88, dot, 5, 2);
+            Fill(Track, x0 + i * (dot + gap), 88, dot, 5, 2);
+        float ax = x0 + (v.LayerFrom + (v.LayerTo - v.LayerFrom) * t) * (dot + gap);
+        Fill(Accent, ax, 88, dot, 5, 2);
 
-        // only held modifiers are drawn, centered as a row of icons
-        bool[] on = { s.Ctrl, s.Shift, s.Alt, s.Gui };
-        int held = 0;
-        foreach (bool b in on)
-            if (b)
-                held++;
-        float mx = W / 2f - (held - 1) * ModGap / 2f;
+        // held modifiers: each takes room in proportion to its presence, so the row reflows smoothly
+        float total = 0;
+        foreach (float m in v.Mods)
+            total += m;
+        float mx = W / 2f - total * ModGap / 2f;
         for (int i = 0; i < 4; i++)
-            if (on[i])
-            {
-                DrawMod(i, mx, 112);
-                mx += ModGap;
-            }
+        {
+            float m = v.Mods[i];
+            if (m > 0.01f)
+                DrawMod(i, mx + m * ModGap / 2f, 112, 0.6f + 0.4f * m, (int)(255 * m));
+            mx += m * ModGap;
+        }
 
-        Battery(12, "L", s.BatteryLeft);
-        Battery(166, "R", s.BatteryRight);
+        Battery(12, "L", v.BatteryLeft);
+        Battery(166, "R", v.BatteryRight);
 
         return ToRgb565();
     }
 
     const float ModGap = 44;
+    const float NameShift = 34;
 
-    // 0 Ctrl (caret), 1 Shift (arrow), 2 Alt (option), 3 GUI (Windows logo); ~22px, centered on (cx, cy)
-    void DrawMod(int kind, float cx, float cy)
+    void DrawName(string name, RectangleF area, float dy, int alpha)
     {
-        using (Pen pen = new Pen(Accent, 2.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+        name = name.ToUpperInvariant();
+        area.Offset(0, dy);
+        g.DrawString(name, FitFont(name), Brush(Color.FromArgb(alpha, Text)), area, center);
+    }
+
+    // 0 Ctrl (caret), 1 Shift (arrow), 2 Alt (option), 3 GUI (Windows logo); ~22px at scale 1
+    void DrawMod(int kind, float cx, float cy, float scale, int alpha)
+    {
+        g.TranslateTransform(cx, cy);
+        g.ScaleTransform(scale, scale);
+        cx = cy = 0;
+        Color color = Color.FromArgb(alpha, Accent);
+        using (Pen pen = new Pen(color, 2.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
         {
             switch (kind)
             {
@@ -93,7 +121,7 @@ sealed class Renderer : IDisposable
                     g.DrawLine(pen, cx + 3, cy - 7, cx + 11, cy - 7);
                     break;
                 default:
-                    SolidBrush b = Brush(Accent);
+                    SolidBrush b = Brush(color);
                     g.FillRectangle(b, cx - 10, cy - 10, 9, 9);
                     g.FillRectangle(b, cx + 1, cy - 10, 9, 9);
                     g.FillRectangle(b, cx - 10, cy + 1, 9, 9);
@@ -101,6 +129,7 @@ sealed class Renderer : IDisposable
                     break;
             }
         }
+        g.ResetTransform();
     }
 
     Font FitFont(string text)
@@ -119,11 +148,11 @@ sealed class Renderer : IDisposable
         g.DrawString(pct > 0 ? pct + "%" : "--", small, Brush(Text), new RectangleF(x + 110, 132, 44, 26), left);
     }
 
-    void Fill(Color c, int x, int y, int w, int h, int r)
+    void Fill(Color c, float x, float y, float w, float h, float r)
     {
         using (GraphicsPath p = new GraphicsPath())
         {
-            int d = 2 * r;
+            float d = 2 * r;
             p.AddArc(x, y, d, d, 180, 90);
             p.AddArc(x + w - d, y, d, d, 270, 90);
             p.AddArc(x + w - d, y + h - d, d, d, 0, 90);
