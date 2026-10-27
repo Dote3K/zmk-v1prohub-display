@@ -32,6 +32,11 @@ sealed class Hub : IDisposable
         frame[2] = 0x0B;
         BitConverter.GetBytes(FrameBytes).CopyTo(frame, 3);
         SetTimeout(EpOut, 5000);
+
+        // drop stale replies once; doing it per command costs a full read timeout every frame
+        SetTimeout(EpIn, 20);
+        for (int i = 0; i < 8 && Read() != null; i++) { }
+        SetTimeout(EpIn, 400);
     }
 
     // Returns null when the hub is not plugged in.
@@ -75,12 +80,10 @@ sealed class Hub : IDisposable
 
     string Command(byte[] data, string prefix, int timeoutMs)
     {
-        Drain();
         uint done;
         if (!WinUsb_WritePipe(usb, EpOut, data, (uint)data.Length, out done, IntPtr.Zero) || done != data.Length)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "write to hub");
 
-        SetTimeout(EpIn, 400);
         Stopwatch sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
@@ -89,12 +92,6 @@ sealed class Hub : IDisposable
                 return reply;
         }
         return null;
-    }
-
-    void Drain()
-    {
-        SetTimeout(EpIn, 20);
-        for (int i = 0; i < 8 && Read() != null; i++) { }
     }
 
     string Read()

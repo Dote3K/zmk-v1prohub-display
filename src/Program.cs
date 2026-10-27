@@ -104,8 +104,8 @@ static class Program
         }
     }
 
-    // Sends a new frame, or re-sends the last one when frame is null. The hub is only held while
-    // sending so the 佳点 app can still open it.
+    // Sends a new frame, or re-sends the last one when frame is null. The hub stays open through an
+    // animation and is released after a second of quiet so the 佳点 app can still open it.
     static void Push(byte[] frame)
     {
         lock (hubLock)
@@ -116,11 +116,29 @@ static class Program
                 return;
             try
             {
-                using (Hub hub = Hub.Open())
-                    if (hub != null)
-                        hub.SendCompressed(lastFrame);
+                if (hub == null)
+                    hub = Hub.Open();
+                if (hub != null && !hub.SendCompressed(lastFrame))
+                    CloseHub(null);
             }
-            catch (Win32Exception) { }
+            catch (Win32Exception)
+            {
+                CloseHub(null);
+            }
+            releaseHub.Change(1000, Timeout.Infinite);
+        }
+    }
+
+    static Hub hub;
+    static readonly Timer releaseHub = new Timer(CloseHub);
+
+    static void CloseHub(object state)
+    {
+        lock (hubLock)
+        {
+            if (hub != null)
+                hub.Dispose();
+            hub = null;
         }
     }
 }
