@@ -1,11 +1,49 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 
 // Turns status changes into short transitions and pushes frames until the screen settles, then sleeps.
+// A change that arrives mid-transition continues from whatever is on screen at that moment.
 sealed class Animator
 {
     const double LayerMs = 260, ModMs = 170, MinFrameMs = 16;
+    const float NameShift = 34;
+
+    // a value easing from one point to another over LayerMs, restartable from where it currently is
+    sealed class Tween
+    {
+        public float From, To;
+        public double Start = double.MinValue;
+
+        public float At(double now)
+        {
+            return From + (To - From) * Ease(Progress(now));
+        }
+
+        public bool Done(double now)
+        {
+            return Progress(now) >= 1;
+        }
+
+        public void Retarget(float to, double now)
+        {
+            From = At(now);
+            To = to;
+            Start = now;
+        }
+
+        float Progress(double now)
+        {
+            return (float)Math.Min(1, Math.Max(0, (now - Start) / LayerMs));
+        }
+    }
+
+    sealed class NameSprite
+    {
+        public string Text;
+        public Tween Offset = new Tween(), Alpha = new Tween();
+    }
 
     readonly Renderer renderer;
     readonly Action<byte[]> send;
@@ -14,9 +52,10 @@ sealed class Animator
     readonly Stopwatch clock = Stopwatch.StartNew();
 
     Status target;
-    string nameFrom = "", nameTo = "";
-    int layerFrom, layerTo;
-    double layerStart = double.MinValue;
+    string shownName;
+    int shownLayer, maxLayer;
+    readonly List<NameSprite> names = new List<NameSprite>();
+    readonly Tween indicator = new Tween();
     readonly float[] mods = new float[4]; // linear presence, eased when drawn
     double lastTick;
 
@@ -69,39 +108,70 @@ sealed class Animator
 
         Status s = target;
         string name = View.LayerLabel(s);
-        if (s.Layer != layerTo || name != nameTo)
+        if (name != shownName || s.Layer != shownLayer)
         {
-            nameFrom = nameTo;
-            layerFrom = layerTo;
-            nameTo = name;
-            layerTo = s.Layer;
-            layerStart = now;
+            // everything on screen slides out from where it is; the new name slides in (up for a higher layer)
+            float dir = shownName == null || s.Layer >= shownLayer ? 1 : -1;
+            NameSprite back = names.FindLast(n => n.Text == name);
+            foreach (NameSprite n in names)
+            {
+                if (n == back)
+                    continue;
+                n.Offset.Retarget(-dir * NameShift, now);
+                n.Alpha.Retarget(0, now);
+            }
+            if (back != null)
+            {
+                // the name is still fading out: bring that copy back instead of stacking a second one
+                back.Offset.Retarget(0, now);
+                back.Alpha.Retarget(1, now);
+            }
+            else
+            {
+                NameSprite fresh = new NameSprite { Text = name };
+                fresh.Offset.From = dir * NameShift;
+                fresh.Offset.Start = now;
+                fresh.Alpha.To = 1;
+                fresh.Alpha.Start = now;
+                names.Add(fresh);
+            }
+
+            indicator.Retarget(s.Layer, now);
+            maxLayer = Math.Max(maxLayer, s.Layer);
+            shownName = name;
+            shownLayer = s.Layer;
         }
-        float lt = (float)Math.Min(1, (now - layerStart) / LayerMs);
+
+        bool moving = !indicator.Done(now);
+        for (int i = names.Count - 1; i >= 0; i--)
+        {
+            NameSprite n = names[i];
+            bool done = n.Alpha.Done(now) && n.Offset.Done(now);
+            if (done && n.Alpha.To == 0)
+            {
+                names.RemoveAt(i);
+                continue;
+            }
+            moving |= !done;
+        }
+        v = new View();
+        foreach (NameSprite n in names)
+            v.Names.Add(new View.Name { Text = n.Text, Offset = n.Offset.At(now), Alpha = n.Alpha.At(now) });
 
         bool[] want = { s.Ctrl, s.Shift, s.Alt, s.Gui };
-        bool modsMoving = false;
-        float[] shown = new float[4];
         for (int i = 0; i < 4; i++)
         {
             float goal = want[i] ? 1 : 0;
             mods[i] = goal > mods[i] ? Math.Min(goal, mods[i] + dt) : Math.Max(goal, mods[i] - dt);
-            modsMoving |= mods[i] != goal;
-            shown[i] = Ease(mods[i]);
+            moving |= mods[i] != goal;
+            v.Mods[i] = Ease(mods[i]);
         }
 
-        v = new View
-        {
-            NameFrom = nameFrom,
-            NameTo = nameTo,
-            LayerFrom = layerFrom,
-            LayerTo = layerTo,
-            LayerT = Ease(lt),
-            Mods = shown,
-            BatteryLeft = s.BatteryLeft,
-            BatteryRight = s.BatteryRight,
-        };
-        return lt < 1 || modsMoving;
+        v.Indicator = indicator.At(now);
+        v.MaxLayer = maxLayer;
+        v.BatteryLeft = s.BatteryLeft;
+        v.BatteryRight = s.BatteryRight;
+        return moving;
     }
 
     static float Ease(float t)

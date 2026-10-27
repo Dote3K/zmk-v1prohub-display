@@ -48,26 +48,20 @@ sealed class Renderer : IDisposable
 
         g.DrawString(keyboard.ToUpperInvariant(), small, Brush(Dim), new RectangleF(10, 2, 200, 22), left);
 
-        // layer name: old one slides out and fades while the new one slides in (up when going to a higher layer)
+        // layer names, each at its own offset and opacity, clipped to the name area
         RectangleF nameArea = new RectangleF(0, 24, W, 62);
         g.SetClip(nameArea);
-        float t = v.LayerT, dir = v.LayerTo >= v.LayerFrom ? 1 : -1;
-        if (t >= 1 || v.NameFrom == v.NameTo)
-            DrawName(v.NameTo, nameArea, 0, 255);
-        else
-        {
-            DrawName(v.NameFrom, nameArea, -dir * NameShift * t, (int)(255 * (1 - t)));
-            DrawName(v.NameTo, nameArea, dir * NameShift * (1 - t), (int)(255 * t));
-        }
+        foreach (View.Name n in v.Names)
+            if (n.Alpha > 0.01f)
+                DrawName(n.Text, nameArea, n.Offset, (int)(255 * n.Alpha));
         g.ResetClip();
 
         // layer track with a sliding indicator
-        int count = Math.Max(3, Math.Max(v.LayerFrom, v.LayerTo) + 1), dot = 14, gap = 6;
+        int count = Math.Max(3, v.MaxLayer + 1), dot = 14, gap = 6;
         int x0 = (W - (count * dot + (count - 1) * gap)) / 2;
         for (int i = 0; i < count; i++)
             Fill(Track, x0 + i * (dot + gap), 88, dot, 5, 2);
-        float ax = x0 + (v.LayerFrom + (v.LayerTo - v.LayerFrom) * t) * (dot + gap);
-        Fill(Accent, ax, 88, dot, 5, 2);
+        Fill(Accent, x0 + v.Indicator * (dot + gap), 88, dot, 5, 2);
 
         // held modifiers: each takes room in proportion to its presence, so the row reflows smoothly
         float total = 0;
@@ -89,7 +83,6 @@ sealed class Renderer : IDisposable
     }
 
     const float ModGap = 44;
-    const float NameShift = 34;
 
     void DrawName(string name, RectangleF area, float dy, int alpha)
     {

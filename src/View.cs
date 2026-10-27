@@ -1,10 +1,19 @@
-// What one frame shows, possibly in the middle of a transition. Fractions are already eased.
+using System.Collections.Generic;
+
+// What one frame shows, possibly in the middle of transitions. All values are already eased.
 sealed class View
 {
-    public string NameFrom = "", NameTo = "";
-    public int LayerFrom, LayerTo;
-    public float LayerT = 1;              // 0 = showing LayerFrom, 1 = showing LayerTo
-    public float[] Mods = new float[4];   // presence of Ctrl, Shift, Alt, GUI: 0 hidden .. 1 shown
+    public sealed class Name
+    {
+        public string Text;
+        public float Offset;   // vertical shift in px, 0 = resting position
+        public float Alpha;    // 0..1
+    }
+
+    public List<Name> Names = new List<Name>();  // layer names on screen, oldest first
+    public float Indicator;                      // layer track position, fractional while sliding
+    public int MaxLayer;                         // highest layer the track has room for
+    public float[] Mods = new float[4];          // presence of Ctrl, Shift, Alt, GUI: 0 hidden .. 1 shown
     public int BatteryLeft, BatteryRight;
 
     public static string LayerLabel(Status s)
@@ -15,8 +24,8 @@ sealed class View
     public static View Settled(Status s)
     {
         View v = new View();
-        v.NameFrom = v.NameTo = LayerLabel(s);
-        v.LayerFrom = v.LayerTo = s.Layer;
+        v.Names.Add(new Name { Text = LayerLabel(s), Alpha = 1 });
+        v.Indicator = v.MaxLayer = s.Layer;
         v.Mods = new float[] { s.Ctrl ? 1 : 0, s.Shift ? 1 : 0, s.Alt ? 1 : 0, s.Gui ? 1 : 0 };
         v.BatteryLeft = s.BatteryLeft;
         v.BatteryRight = s.BatteryRight;
