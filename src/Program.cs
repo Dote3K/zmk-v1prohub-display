@@ -5,7 +5,20 @@ static class Program
 {
     static int Main(string[] args)
     {
+        Status demo = new Status { Layer = 1, LayerName = "Nav/Num", Mods = 0x02, BatteryLeft = 87, BatteryRight = 0 };
+
+        using (Renderer renderer = new Renderer("Cygnus"))
+        {
+            if (args.Length == 2 && args[0] == "--png")
+            {
+                renderer.Render(demo);
+                renderer.SavePng(args[1]);
+                return 0;
+            }
+        }
+
         using (Hub hub = Hub.Open())
+        using (Renderer renderer = new Renderer("Cygnus"))
         {
             if (hub == null)
             {
@@ -13,19 +26,8 @@ static class Program
                 return 1;
             }
 
-            // test pattern: red -> blue horizontal gradient
-            byte[] px = new byte[Hub.FrameBytes];
-            for (int y = 0; y < Hub.Height; y++)
-                for (int x = 0; x < Hub.Width; x++)
-                {
-                    int r = 255 - x * 255 / (Hub.Width - 1), b = x * 255 / (Hub.Width - 1), g = y * 255 / (Hub.Height - 1);
-                    int i = (y * Hub.Width + x) * 2;
-                    px[i] = (byte)((r & 0xF8) | (g >> 5));
-                    px[i + 1] = (byte)(((g & 0x1C) << 3) | (b >> 3));
-                }
-
-            Console.WriteLine(hub.SendFrame(px) ? "LIVE,ok" : "frame rejected");
-            Thread.Sleep(5000);
+            Console.WriteLine(hub.SendFrame(renderer.Render(demo)) ? "LIVE,ok" : "frame rejected");
+            Thread.Sleep(8000);
             hub.ExitLive();
         }
         return 0;
