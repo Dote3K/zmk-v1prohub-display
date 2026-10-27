@@ -29,6 +29,8 @@ sealed class RawHid : IDisposable
         IntPtr set = SetupDiGetClassDevs(ref guid, null, IntPtr.Zero, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
         if (set == new IntPtr(-1))
             return null;
+        // never open other HID devices: the interface path already carries vid/pid
+        string match = string.Format("vid_{0:x4}&pid_{1:x4}", vid, pid);
         IntPtr detail = Marshal.AllocHGlobal(1024);
         try
         {
@@ -39,7 +41,10 @@ sealed class RawHid : IDisposable
                 Marshal.WriteInt32(detail, IntPtr.Size == 8 ? 8 : 6);
                 if (!SetupDiGetDeviceInterfaceDetail(set, ref data, detail, 1024, IntPtr.Zero, IntPtr.Zero))
                     continue;
-                RawHid hid = TryOpen(Marshal.PtrToStringUni(detail + 4), vid, pid);
+                string path = Marshal.PtrToStringUni(detail + 4);
+                if (path.IndexOf(match, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                RawHid hid = TryOpen(path, vid, pid);
                 if (hid != null)
                     return hid;
             }
