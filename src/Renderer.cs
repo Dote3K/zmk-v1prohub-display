@@ -16,7 +16,6 @@ sealed class Renderer : IDisposable
     static readonly Color Accent = Color.White;
     static readonly Color Text = Color.White;
     static readonly Color Dim = Color.FromArgb(0x70, 0x70, 0x70);
-    static readonly Color Pill = Color.FromArgb(0x1A, 0x1A, 0x1A);
     static readonly Color Track = Color.FromArgb(0x26, 0x26, 0x26);
 
     readonly Bitmap bmp = new Bitmap(W, H, PixelFormat.Format24bppRgb);
@@ -52,20 +51,56 @@ sealed class Renderer : IDisposable
         for (int i = 0; i < count; i++)
             Fill(i == s.Layer ? Accent : Track, x0 + i * (dot + gap), 88, dot, 5, 2);
 
-        string[] names = { "CTRL", "SHIFT", "ALT", "GUI" };
+        // only held modifiers are drawn, centered as a row of icons
         bool[] on = { s.Ctrl, s.Shift, s.Alt, s.Gui };
-        int pw = 62, pg = 8, px0 = (W - (4 * pw + 3 * pg)) / 2;
+        int held = 0;
+        foreach (bool b in on)
+            if (b)
+                held++;
+        float mx = W / 2f - (held - 1) * ModGap / 2f;
         for (int i = 0; i < 4; i++)
-        {
-            int x = px0 + i * (pw + pg);
-            Fill(on[i] ? Accent : Pill, x, 102, pw, 20, 10);
-            g.DrawString(names[i], pill, on[i] ? Brushes.Black : Brush(Dim), new RectangleF(x, 102, pw, 20), center);
-        }
+            if (on[i])
+            {
+                DrawMod(i, mx, 112);
+                mx += ModGap;
+            }
 
         Battery(12, "L", s.BatteryLeft);
         Battery(166, "R", s.BatteryRight);
 
         return ToRgb565();
+    }
+
+    const float ModGap = 44;
+
+    // 0 Ctrl (caret), 1 Shift (arrow), 2 Alt (option), 3 GUI (Windows logo); ~22px, centered on (cx, cy)
+    void DrawMod(int kind, float cx, float cy)
+    {
+        using (Pen pen = new Pen(Accent, 2.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+        {
+            switch (kind)
+            {
+                case 0:
+                    g.DrawLines(pen, new[] { new PointF(cx - 9, cy + 4), new PointF(cx, cy - 6), new PointF(cx + 9, cy + 4) });
+                    break;
+                case 1:
+                    g.DrawPolygon(pen, new[] {
+                        new PointF(cx, cy - 11), new PointF(cx + 11, cy + 1), new PointF(cx + 5, cy + 1), new PointF(cx + 5, cy + 10),
+                        new PointF(cx - 5, cy + 10), new PointF(cx - 5, cy + 1), new PointF(cx - 11, cy + 1) });
+                    break;
+                case 2:
+                    g.DrawLines(pen, new[] { new PointF(cx - 11, cy - 7), new PointF(cx - 4, cy - 7), new PointF(cx + 4, cy + 8), new PointF(cx + 11, cy + 8) });
+                    g.DrawLine(pen, cx + 3, cy - 7, cx + 11, cy - 7);
+                    break;
+                default:
+                    SolidBrush b = Brush(Accent);
+                    g.FillRectangle(b, cx - 10, cy - 10, 9, 9);
+                    g.FillRectangle(b, cx + 1, cy - 10, 9, 9);
+                    g.FillRectangle(b, cx - 10, cy + 1, 9, 9);
+                    g.FillRectangle(b, cx + 1, cy + 1, 9, 9);
+                    break;
+            }
+        }
     }
 
     Font FitFont(string text)

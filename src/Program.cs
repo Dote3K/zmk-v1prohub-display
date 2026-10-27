@@ -20,7 +20,7 @@ static class Program
 
         if (args.Length == 2 && args[0] == "--png")
         {
-            renderer.Render(new Status { Layer = 1, LayerName = "Nav/Num", Mods = 0x02, BatteryLeft = 87 });
+            renderer.Render(new Status { Layer = 1, LayerName = "Nav/Num", Mods = 0x0F, BatteryLeft = 87 });
             renderer.SavePng(args[1]);
             return 0;
         }
