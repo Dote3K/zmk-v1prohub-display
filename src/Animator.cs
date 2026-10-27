@@ -5,7 +5,7 @@ using System.Threading;
 // Turns status changes into short transitions and pushes frames until the screen settles, then sleeps.
 sealed class Animator
 {
-    const double LayerMs = 220, ModMs = 150, MinFrameMs = 16;
+    const double LayerMs = 260, ModMs = 170, MinFrameMs = 16;
 
     readonly Renderer renderer;
     readonly Action<byte[]> send;

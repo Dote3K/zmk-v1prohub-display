@@ -33,7 +33,8 @@ sealed class Renderer : IDisposable
         keyboard = keyboardName;
         g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        // no grid fitting: lets text sit at fractional positions so it glides instead of stepping
+        g.TextRenderingHint = TextRenderingHint.AntiAlias;
     }
 
     public byte[] Render(Status s)
