@@ -13,7 +13,8 @@ static class Program
     static readonly object hubLock = new object();
     static Renderer renderer;
     static Animator animator;
-    static byte[] lastFrame;
+    static readonly byte[] lastFrame = new byte[Hub.FrameBytes]; // own copy: the renderer reuses its buffer
+    static bool haveFrame;
 
     static int Main(string[] args)
     {
@@ -111,8 +112,11 @@ static class Program
         lock (hubLock)
         {
             if (frame != null)
-                lastFrame = frame;
-            if (lastFrame == null)
+            {
+                Buffer.BlockCopy(frame, 0, lastFrame, 0, Hub.FrameBytes);
+                haveFrame = true;
+            }
+            if (!haveFrame)
                 return;
             try
             {

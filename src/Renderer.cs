@@ -169,30 +169,34 @@ sealed class Renderer : IDisposable
         return b;
     }
 
+    readonly byte[] pixels = new byte[Hub.FrameBytes];
+    byte[] scan;
+
+    // The returned buffer is reused by the next Render call.
     byte[] ToRgb565()
     {
         BitmapData data = bmp.LockBits(new Rectangle(0, 0, W, H), ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
-        byte[] row = new byte[data.Stride];
-        byte[] px = new byte[Hub.FrameBytes];
+        int stride = data.Stride;
         try
         {
-            for (int y = 0; y < H; y++)
-            {
-                Marshal.Copy(data.Scan0 + y * data.Stride, row, 0, data.Stride);
-                for (int x = 0; x < W; x++)
-                {
-                    int b = row[x * 3], gr = row[x * 3 + 1], r = row[x * 3 + 2];
-                    int i = (y * W + x) * 2;
-                    px[i] = (byte)((r & 0xF8) | (gr >> 5));
-                    px[i + 1] = (byte)(((gr & 0x1C) << 3) | (b >> 3));
-                }
-            }
+            if (scan == null)
+                scan = new byte[stride * H];
+            Marshal.Copy(data.Scan0, scan, 0, stride * H);
         }
         finally
         {
             bmp.UnlockBits(data);
         }
-        return px;
+
+        int i = 0;
+        for (int y = 0; y < H; y++)
+            for (int s = y * stride, end = s + W * 3; s < end; s += 3)
+            {
+                int b = scan[s], gr = scan[s + 1], r = scan[s + 2];
+                pixels[i++] = (byte)((r & 0xF8) | (gr >> 5));
+                pixels[i++] = (byte)(((gr & 0x1C) << 3) | (b >> 3));
+            }
+        return pixels;
     }
 
     public void SavePng(string path)
