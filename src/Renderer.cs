@@ -11,12 +11,13 @@ sealed class Renderer : IDisposable
 {
     const int W = Hub.Width, H = Hub.Height;
 
-    static readonly Color Background = Color.FromArgb(0x0A, 0x0D, 0x12);
-    static readonly Color Accent = Color.FromArgb(0x8B, 0x7C, 0xFF);
-    static readonly Color Text = Color.FromArgb(0xC9, 0xD1, 0xDC);
-    static readonly Color Dim = Color.FromArgb(0x5B, 0x64, 0x75);
-    static readonly Color Pill = Color.FromArgb(0x16, 0x1B, 0x24);
-    static readonly Color Track = Color.FromArgb(0x1C, 0x22, 0x2D);
+    // black and white everywhere; only the battery bars carry color
+    static readonly Color Background = Color.Black;
+    static readonly Color Accent = Color.White;
+    static readonly Color Text = Color.White;
+    static readonly Color Dim = Color.FromArgb(0x70, 0x70, 0x70);
+    static readonly Color Pill = Color.FromArgb(0x1A, 0x1A, 0x1A);
+    static readonly Color Track = Color.FromArgb(0x26, 0x26, 0x26);
 
     readonly Bitmap bmp = new Bitmap(W, H, PixelFormat.Format24bppRgb);
     readonly Graphics g;
@@ -49,7 +50,7 @@ sealed class Renderer : IDisposable
         int count = Math.Max(3, s.Layer + 1), dot = 14, gap = 6;
         int x0 = (W - (count * dot + (count - 1) * gap)) / 2;
         for (int i = 0; i < count; i++)
-            Fill(i == s.Layer ? Accent : Color.FromArgb(0x2A, 0x31, 0x40), x0 + i * (dot + gap), 88, dot, 5, 2);
+            Fill(i == s.Layer ? Accent : Track, x0 + i * (dot + gap), 88, dot, 5, 2);
 
         string[] names = { "CTRL", "SHIFT", "ALT", "GUI" };
         bool[] on = { s.Ctrl, s.Shift, s.Alt, s.Gui };
@@ -58,7 +59,7 @@ sealed class Renderer : IDisposable
         {
             int x = px0 + i * (pw + pg);
             Fill(on[i] ? Accent : Pill, x, 102, pw, 20, 10);
-            g.DrawString(names[i], pill, on[i] ? Brushes.White : Brush(Dim), new RectangleF(x, 102, pw, 20), center);
+            g.DrawString(names[i], pill, on[i] ? Brushes.Black : Brush(Dim), new RectangleF(x, 102, pw, 20), center);
         }
 
         Battery(12, "L", s.BatteryLeft);
