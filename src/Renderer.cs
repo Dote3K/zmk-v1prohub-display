@@ -82,8 +82,8 @@ sealed class Renderer : IDisposable
             mx += m * ModGap;
         }
 
-        Battery(12, "L", v.BatteryLeft);
-        Battery(166, "R", v.BatteryRight);
+        Battery(16, v.BatteryLeft);
+        Battery(W - 16 - BatteryWidth, v.BatteryRight);
 
         return ToRgb565();
     }
@@ -139,14 +139,16 @@ sealed class Renderer : IDisposable
         return g.MeasureString(text, big).Width <= W - 16 ? big : medium;
     }
 
-    void Battery(int x, string label, int pct)
+    const int BatteryWidth = 130;
+
+    // thin bar with the percentage centered above it
+    void Battery(int x, int pct)
     {
         Color col = pct >= 50 ? Color.FromArgb(0x32, 0xD5, 0x83) : pct >= 20 ? Color.FromArgb(0xFD, 0xB0, 0x22) : Color.FromArgb(0xF9, 0x70, 0x66);
-        g.DrawString(label, pill, Brush(Dim), new RectangleF(x, 132, 18, 26), left);
-        Fill(Track, x + 18, 139, 90, 12, 6);
+        g.DrawString(pct > 0 ? pct + "%" : "--", small, Brush(pct > 0 ? Text : Dim), new RectangleF(x, 132, BatteryWidth, 18), center);
+        Fill(Track, x, 154, BatteryWidth, 4, 2);
         if (pct > 0)
-            Fill(col, x + 18, 139, Math.Max(12, 90 * pct / 100), 12, 6);
-        g.DrawString(pct > 0 ? pct + "%" : "--", small, Brush(Text), new RectangleF(x + 110, 132, 44, 26), left);
+            Fill(col, x, 154, Math.Max(4, BatteryWidth * pct / 100), 4, 2);
     }
 
     void Fill(Color c, float x, float y, float w, float h, float r)
