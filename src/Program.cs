@@ -70,12 +70,17 @@ static class Program
 
     static void Run()
     {
+        // registered before the first lookup so an arrival in between is not missed
+        AutoResetEvent hidArrived = new AutoResetEvent(false);
+        DeviceWatch.OnHidArrival(hidArrived);
+
         while (true)
         {
             RawHid dongle = RawHid.Open(DongleVid, DonglePid);
             if (dongle == null)
             {
-                Thread.Sleep(3000);
+                hidArrived.WaitOne();
+                Thread.Sleep(500); // let all HID interfaces of the new device show up
                 continue;
             }
             try
@@ -94,7 +99,6 @@ static class Program
             {
                 dongle.Dispose();
             }
-            Thread.Sleep(1000);
         }
     }
 
