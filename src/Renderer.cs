@@ -11,7 +11,7 @@ sealed class Renderer : IDisposable
 {
     const int W = Hub.Width, H = Hub.Height;
 
-    // black and white everywhere; only the battery bars carry color
+    // black and white everywhere; only a low battery bar turns orange or red
     static readonly Color Background = Color.Black;
     static readonly Color Accent = Color.White;
     static readonly Color Text = Color.White;
@@ -144,8 +144,8 @@ sealed class Renderer : IDisposable
     // thin bar with the percentage centered above it
     void Battery(int x, int pct)
     {
-        Color col = pct >= 50 ? Color.FromArgb(0x32, 0xD5, 0x83) : pct >= 20 ? Color.FromArgb(0xFD, 0xB0, 0x22) : Color.FromArgb(0xF9, 0x70, 0x66);
-        g.DrawString(pct > 0 ? pct + "%" : "--", small, Brush(pct > 0 ? Text : Dim), new RectangleF(x, 132, BatteryWidth, 18), center);
+        Color col = pct >= 50 ? Color.White : pct >= 20 ? Color.FromArgb(0xFF, 0x8A, 0x1F) : Color.FromArgb(0xF0, 0x44, 0x38);
+        g.DrawString(pct > 0 ? pct.ToString() : "--", small, Brush(pct > 0 ? Text : Dim), new RectangleF(x, 132, BatteryWidth, 18), center);
         Fill(Track, x, 154, BatteryWidth, 4, 2);
         if (pct > 0)
             Fill(col, x, 154, Math.Max(4, BatteryWidth * pct / 100), 4, 2);
