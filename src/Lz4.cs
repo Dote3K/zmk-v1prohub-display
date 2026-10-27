@@ -1,54 +1,62 @@
 using System;
-using System.IO;
 
 // LZ4-compressed LIVE frame, same layout as the vendor WebUSB SDK 1.2:
 //   header  A5 5A 0B <u32 block bytes> 03 <u32 raw bytes> <u16 4096> 01 00
 //   blocks  per 4096 raw bytes: <1 = lz4 / 0 = stored> <u16 raw len> <u16 data len> <data>
-static class Lz4
+// Keeps its buffers between frames, so encoding a frame allocates nothing.
+sealed class Lz4
 {
     const int BlockSize = 4096;
 
-    public static byte[] Frame(byte[] raw)
+    readonly int[] table = new int[1 << 12];
+    readonly byte[] block = new byte[BlockSize + BlockSize / 255 + 16]; // worst case for one block
+    byte[] frame = new byte[16];
+
+    // Encodes raw into the internal buffer and returns it; the frame is the first Length bytes and stays
+    // valid until the next call.
+    public byte[] Frame(byte[] raw, out int length)
     {
-        MemoryStream blocks = new MemoryStream(raw.Length / 4);
+        int max = 16 + raw.Length + (raw.Length / BlockSize + 1) * 5;
+        if (frame.Length < max)
+            frame = new byte[max];
+
+        int o = 16;
         for (int off = 0; off < raw.Length; off += BlockSize)
         {
             int len = Math.Min(BlockSize, raw.Length - off);
-            byte[] packed = Compress(raw, off, len);
-            bool useLz4 = packed.Length < len;
-            blocks.WriteByte((byte)(useLz4 ? 1 : 0));
-            WriteU16(blocks, len);
-            WriteU16(blocks, useLz4 ? packed.Length : len);
+            int packed = Compress(raw, off, len);
+            bool useLz4 = packed < len;
+            frame[o] = (byte)(useLz4 ? 1 : 0);
+            PutU16(o + 1, len);
+            PutU16(o + 3, useLz4 ? packed : len);
             if (useLz4)
-                blocks.Write(packed, 0, packed.Length);
+                Buffer.BlockCopy(block, 0, frame, o + 5, packed);
             else
-                blocks.Write(raw, off, len);
+                Buffer.BlockCopy(raw, off, frame, o + 5, len);
+            o += 5 + (useLz4 ? packed : len);
         }
 
-        byte[] frame = new byte[16 + blocks.Length];
         frame[0] = 0xA5;
         frame[1] = 0x5A;
         frame[2] = 0x0B;
-        BitConverter.GetBytes((uint)blocks.Length).CopyTo(frame, 3);
+        PutU32(3, o - 16);
         frame[7] = 3;
-        BitConverter.GetBytes((uint)raw.Length).CopyTo(frame, 8);
-        BitConverter.GetBytes((ushort)BlockSize).CopyTo(frame, 12);
+        PutU32(8, raw.Length);
+        PutU16(12, BlockSize);
         frame[14] = 1;
-        blocks.Position = 0;
-        blocks.Read(frame, 16, (int)blocks.Length);
+        frame[15] = 0;
+        length = o;
         return frame;
     }
 
     // Plain LZ4 block encoder mirroring the SDK's: greedy 4-byte matches, matches may run to the end,
-    // always closed by a literal-only token.
-    static byte[] Compress(byte[] src, int start, int len)
+    // always closed by a literal-only token. Writes into block, returns the byte count.
+    int Compress(byte[] src, int start, int len)
     {
-        MemoryStream o = new MemoryStream(len);
-        int[] table = new int[1 << 12];
         for (int i = 0; i < table.Length; i++)
             table[i] = -1;
 
-        int end = start + len, anchor = start, p = start;
+        int o = 0, end = start + len, anchor = start, p = start;
         while (p + 4 <= end)
         {
             uint v = BitConverter.ToUInt32(src, p);
@@ -66,15 +74,16 @@ static class Lz4
                 m++;
 
             int lit = p - anchor, ml = m - 4;
-            o.WriteByte((byte)(Math.Min(lit, 15) << 4 | Math.Min(ml, 15)));
+            block[o++] = (byte)(Math.Min(lit, 15) << 4 | Math.Min(ml, 15));
             if (lit >= 15)
-                WriteLength(o, lit - 15);
-            o.Write(src, anchor, lit);
+                o = PutLength(o, lit - 15);
+            Buffer.BlockCopy(src, anchor, block, o, lit);
+            o += lit;
             int dist = p - cand;
-            o.WriteByte((byte)dist);
-            o.WriteByte((byte)(dist >> 8));
+            block[o++] = (byte)dist;
+            block[o++] = (byte)(dist >> 8);
             if (ml >= 15)
-                WriteLength(o, ml - 15);
+                o = PutLength(o, ml - 15);
 
             int matchStart = p;
             p += m;
@@ -84,23 +93,30 @@ static class Lz4
         }
 
         int rest = end - anchor;
-        o.WriteByte((byte)(Math.Min(rest, 15) << 4));
+        block[o++] = (byte)(Math.Min(rest, 15) << 4);
         if (rest >= 15)
-            WriteLength(o, rest - 15);
-        o.Write(src, anchor, rest);
-        return o.ToArray();
+            o = PutLength(o, rest - 15);
+        Buffer.BlockCopy(src, anchor, block, o, rest);
+        return o + rest;
     }
 
-    static void WriteLength(Stream o, int n)
+    int PutLength(int o, int n)
     {
         for (; n >= 255; n -= 255)
-            o.WriteByte(255);
-        o.WriteByte((byte)n);
+            block[o++] = 255;
+        block[o++] = (byte)n;
+        return o;
     }
 
-    static void WriteU16(Stream o, int v)
+    void PutU16(int at, int v)
     {
-        o.WriteByte((byte)v);
-        o.WriteByte((byte)(v >> 8));
+        frame[at] = (byte)v;
+        frame[at + 1] = (byte)(v >> 8);
+    }
+
+    void PutU32(int at, int v)
+    {
+        PutU16(at, v);
+        PutU16(at + 2, v >> 16);
     }
 }

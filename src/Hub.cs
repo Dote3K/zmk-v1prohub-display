@@ -35,7 +35,7 @@ sealed class Hub : IDisposable
 
         // drop stale replies once; doing it per command costs a full read timeout every frame
         SetTimeout(EpIn, 20);
-        for (int i = 0; i < 8 && Read() != null; i++) { }
+        for (int i = 0; i < 8 && Read(); i++) { }
         SetTimeout(EpIn, 400);
     }
 
@@ -64,43 +64,66 @@ sealed class Hub : IDisposable
     public bool SendFrame(byte[] rgb565)
     {
         Buffer.BlockCopy(rgb565, 0, frame, 8, FrameBytes);
-        return Command(frame, "LIVE,", 4000) == "LIVE,ok";
+        return Command(frame, frame.Length, "LIVE,", 4000) && ReplyIs("LIVE,ok");
     }
 
     // LZ4 frame: mostly-black screens shrink a lot, so transfers are much shorter than raw ones.
     public bool SendCompressed(byte[] rgb565)
     {
-        return Command(Lz4.Frame(rgb565), "LIVE,", 4000) == "LIVE,ok";
+        int length;
+        byte[] data = lz4.Frame(rgb565, out length);
+        return Command(data, length, "LIVE,", 4000) && ReplyIs("LIVE,ok");
     }
 
     public void ExitLive()
     {
-        Command(new byte[] { 0xA5, 0x5A, 0x0B, 0, 0, 0, 0, 0 }, "LIVE,", 2500);
+        byte[] exit = { 0xA5, 0x5A, 0x0B, 0, 0, 0, 0, 0 };
+        Command(exit, exit.Length, "LIVE,", 2500);
     }
 
-    string Command(byte[] data, string prefix, int timeoutMs)
+    readonly Lz4 lz4 = new Lz4();
+    readonly byte[] reply = new byte[64];
+    int replyLength;
+
+    // Writes a command and waits for a reply starting with prefix; the reply is left in reply/replyLength.
+    bool Command(byte[] data, int length, string prefix, int timeoutMs)
     {
         uint done;
-        if (!WinUsb_WritePipe(usb, EpOut, data, (uint)data.Length, out done, IntPtr.Zero) || done != data.Length)
+        if (!WinUsb_WritePipe(usb, EpOut, data, (uint)length, out done, IntPtr.Zero) || done != length)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "write to hub");
 
         Stopwatch sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
-        {
-            string reply = Read();
-            if (reply != null && reply.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return reply;
-        }
-        return null;
+            if (Read() && ReplyStartsWith(prefix))
+                return true;
+        return false;
     }
 
-    string Read()
+    bool Read()
     {
-        byte[] buf = new byte[64];
         uint got;
-        if (!WinUsb_ReadPipe(usb, EpIn, buf, (uint)buf.Length, out got, IntPtr.Zero) || got == 0)
-            return null;
-        return Encoding.ASCII.GetString(buf, 0, (int)got).TrimEnd('\0').Trim();
+        if (!WinUsb_ReadPipe(usb, EpIn, reply, (uint)reply.Length, out got, IntPtr.Zero) || got == 0)
+            return false;
+        replyLength = (int)got;
+        while (replyLength > 0 && (reply[replyLength - 1] == 0 || reply[replyLength - 1] == ' '))
+            replyLength--;
+        return true;
+    }
+
+    // ASCII compares on the reply buffer, so waiting for acks allocates nothing
+    bool ReplyStartsWith(string s)
+    {
+        if (replyLength < s.Length)
+            return false;
+        for (int i = 0; i < s.Length; i++)
+            if (char.ToUpperInvariant((char)reply[i]) != char.ToUpperInvariant(s[i]))
+                return false;
+        return true;
+    }
+
+    bool ReplyIs(string s)
+    {
+        return replyLength == s.Length && ReplyStartsWith(s);
     }
 
     void SetTimeout(byte pipe, uint ms)
