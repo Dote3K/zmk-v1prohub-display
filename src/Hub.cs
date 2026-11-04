@@ -75,6 +75,28 @@ sealed class Hub : IDisposable
         return Command(data, length, "LIVE,", 4000) && ReplyIs("LIVE,ok");
     }
 
+    // Backlight 0..255; 0 turns the panel off (息屏). Ack: "DSP,<value>".
+    public bool SetBrightness(int value)
+    {
+        byte[] cmd = { 0xA5, 0x5A, 0x08, 0xFF, (byte)value };
+        return Command(cmd, cmd.Length, "DSP,", 2000);
+    }
+
+    // "STA,<brightness>,<screen off>,<rotation>,<follow PC sleep>", or null on old firmware.
+    public string DisplayStatus()
+    {
+        byte[] cmd = { 0xA5, 0x5A, 0x08, 0xFC };
+        return Command(cmd, cmd.Length, "STA,", 1000) ? Encoding.ASCII.GetString(reply, 0, replyLength) : null;
+    }
+
+    // The brightness field of DisplayStatus, or -1 when it cannot be read.
+    public int Brightness()
+    {
+        string sta = DisplayStatus();
+        int value;
+        return sta != null && int.TryParse(sta.Substring(4).Split(',')[0], out value) ? value : -1;
+    }
+
     public void ExitLive()
     {
         byte[] exit = { 0xA5, 0x5A, 0x0B, 0, 0, 0, 0, 0 };

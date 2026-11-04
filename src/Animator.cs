@@ -7,14 +7,15 @@ using System.Threading;
 // A change that arrives mid-transition continues from whatever is on screen at that moment.
 sealed class Animator
 {
-    const double LayerMs = 260, ModMs = 170, MinFrameMs = 16;
+    const double LayerMs = 260, ModMs = 170, ScreenOffMs = 900, ScreenOnMs = 200, MinFrameMs = 16;
     const float NameShift = 34;
 
-    // a value easing from one point to another over LayerMs, restartable from where it currently is
+    // a value easing from one point to another over Ms, restartable from where it currently is
     sealed class Tween
     {
         public float From, To;
         public double Start = double.MinValue;
+        public double Ms = LayerMs;
 
         public float At(double now)
         {
@@ -35,7 +36,7 @@ sealed class Animator
 
         float Progress(double now)
         {
-            return (float)Math.Min(1, Math.Max(0, (now - Start) / LayerMs));
+            return (float)Math.Min(1, Math.Max(0, (now - Start) / Ms));
         }
     }
 
@@ -47,6 +48,7 @@ sealed class Animator
 
     readonly Renderer renderer;
     readonly Action<byte[]> send;
+    readonly Action<bool> screenPower; // backlight: off once faded out, on before fading in
     readonly AutoResetEvent changed = new AutoResetEvent(false);
     readonly object sync = new object();
     readonly Stopwatch clock = Stopwatch.StartNew();
@@ -56,13 +58,15 @@ sealed class Animator
     int shownLayer, maxLayer;
     readonly List<NameSprite> names = new List<NameSprite>();
     readonly Tween indicator = new Tween();
+    readonly Tween screen = new Tween { From = 1, To = 1 }; // brightness, faded when the keyboard goes idle
     readonly float[] mods = new float[4]; // linear presence, eased when drawn
     double lastTick;
 
-    public Animator(Renderer renderer, Action<byte[]> send)
+    public Animator(Renderer renderer, Action<byte[]> send, Action<bool> screenPower)
     {
         this.renderer = renderer;
         this.send = send;
+        this.screenPower = screenPower;
         Thread t = new Thread(Loop);
         t.IsBackground = true;
         t.Start();
@@ -90,6 +94,7 @@ sealed class Animator
                 View v;
                 lock (sync)
                     moving = Step(out v);
+                screenPower(moving || v.Screen > 0);
                 send(renderer.Render(v));
 
                 double spent = clock.Elapsed.TotalMilliseconds - started;
@@ -142,7 +147,13 @@ sealed class Animator
             shownLayer = s.Layer;
         }
 
-        bool moving = !indicator.Done(now);
+        if (s.Active != (screen.To == 1))
+        {
+            screen.Retarget(s.Active ? 1 : 0, now); // From is taken at the old duration, so no jump
+            screen.Ms = s.Active ? ScreenOnMs : ScreenOffMs;
+        }
+
+        bool moving = !indicator.Done(now) || !screen.Done(now);
         for (int i = names.Count - 1; i >= 0; i--)
         {
             NameSprite n = names[i];
@@ -171,6 +182,7 @@ sealed class Animator
         v.MaxLayer = maxLayer;
         v.BatteryLeft = s.BatteryLeft;
         v.BatteryRight = s.BatteryRight;
+        v.Screen = screen.At(now);
         return moving;
     }
 

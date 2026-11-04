@@ -45,6 +45,8 @@ sealed class Renderer : IDisposable
     public byte[] Render(View v)
     {
         g.Clear(Background);
+        if (v.Screen <= 0.004f)
+            return ToRgb565(); // screen off: an all-black frame
 
         g.DrawString(keyboard.ToUpperInvariant(), small, Brush(Dim), new RectangleF(10, 2, 200, 22), left);
 
@@ -78,6 +80,10 @@ sealed class Renderer : IDisposable
 
         Battery(16, v.BatteryLeft);
         Battery(W - 16 - BatteryWidth, v.BatteryRight);
+
+        // fading to or from off: darken everything drawn above
+        if (v.Screen < 1)
+            g.FillRectangle(Brush(Color.FromArgb((int)(255 * (1 - v.Screen)), Background)), 0, 0, W, H);
 
         return ToRgb565();
     }

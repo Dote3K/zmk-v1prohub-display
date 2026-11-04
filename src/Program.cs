@@ -27,6 +27,19 @@ static class Program
             return 0;
         }
 
+        // shows the status screen, fades it out and switches the backlight off, then wakes it again
+        if (args.Length == 1 && args[0] == "--screen-test")
+        {
+            animator = new Animator(renderer, Push, SetScreen);
+            animator.Show(new Status { LayerName = "Base" });
+            Thread.Sleep(2000);
+            animator.Show(new Status { LayerName = "Base", Active = false });
+            Thread.Sleep(6000);
+            animator.Show(new Status { LayerName = "Base" });
+            Thread.Sleep(2000);
+            return 0;
+        }
+
         if (args.Length == 1 && args[0] == "--install")
             return Autostart(true);
         if (args.Length == 1 && args[0] == "--uninstall")
@@ -40,7 +53,7 @@ static class Program
         int refresh = args.Length == 2 && args[0] == "--refresh" ? int.Parse(args[1]) : 0;
         Timer timer = refresh > 0 ? new Timer(_ => Push(null), null, refresh * 1000, refresh * 1000) : null;
 
-        animator = new Animator(renderer, Push);
+        animator = new Animator(renderer, Push, SetScreen);
         Run();
         GC.KeepAlive(timer);
         GC.KeepAlive(single);
@@ -105,8 +118,39 @@ static class Program
         }
     }
 
+    // Whether the screen should be lit, and whether the hub's backlight is off right now. The backlight
+    // state starts unknown (treated as off), so the first push turns it on even if a previous run left it off.
+    static bool screenOn = true, backlightOff = true;
+
+    // Called by the animator: off once the idle fade-out has finished, on as soon as a fade-in starts.
+    static void SetScreen(bool on)
+    {
+        lock (hubLock)
+        {
+            if (screenOn == on)
+                return;
+            screenOn = on;
+            if (!on)
+                Push(null);
+        }
+    }
+
+    // Brightness 0 only sets the hub's screen-off flag and keeps the configured level, so turning the
+    // screen back on reads that level (set in the 佳点 app) and sends it again.
+    static void SyncBacklight()
+    {
+        if (backlightOff == !screenOn)
+            return;
+        int level = screenOn ? hub.Brightness() : 0;
+        if (screenOn && level <= 0)
+            level = 255;
+        if (hub.SetBrightness(level))
+            backlightOff = !screenOn;
+    }
+
     // Sends a new frame, or re-sends the last one when frame is null. The hub stays open through an
     // animation and is released after a second of quiet so the 佳点 app can still open it.
+    // While the screen is off no frames go out; only the backlight is switched off.
     static void Push(byte[] frame)
     {
         lock (hubLock)
@@ -116,14 +160,18 @@ static class Program
                 Buffer.BlockCopy(frame, 0, lastFrame, 0, Hub.FrameBytes);
                 haveFrame = true;
             }
-            if (!haveFrame)
+            if (!haveFrame || (!screenOn && backlightOff))
                 return;
             try
             {
                 if (hub == null)
                     hub = Hub.Open();
-                if (hub != null && !hub.SendCompressed(lastFrame))
-                    CloseHub(null);
+                if (hub != null)
+                {
+                    SyncBacklight();
+                    if (screenOn && !hub.SendCompressed(lastFrame))
+                        CloseHub(null);
+                }
             }
             catch (Win32Exception)
             {

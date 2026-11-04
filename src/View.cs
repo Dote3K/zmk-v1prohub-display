@@ -15,6 +15,7 @@ sealed class View
     public int MaxLayer;                         // highest layer the track has room for
     public float[] Mods = new float[4];          // presence of Ctrl, Shift, Alt, GUI: 0 hidden .. 1 shown
     public int BatteryLeft, BatteryRight;
+    public float Screen = 1;                     // overall brightness: 0 screen off .. 1 fully on
 
     public static string LayerLabel(Status s)
     {
@@ -29,6 +30,7 @@ sealed class View
         v.Mods = new float[] { s.Ctrl ? 1 : 0, s.Shift ? 1 : 0, s.Alt ? 1 : 0, s.Gui ? 1 : 0 };
         v.BatteryLeft = s.BatteryLeft;
         v.BatteryRight = s.BatteryRight;
+        v.Screen = s.Active ? 1 : 0;
         return v;
     }
 }
