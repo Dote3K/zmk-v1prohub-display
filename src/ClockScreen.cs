@@ -149,7 +149,7 @@ sealed class ClockScreen : IScreen
     public byte[] Draw(string style, DateTime t, WeatherNow w, double ms, float brightness, out double next)
     {
         c.Clear();
-        next = 1000 - t.Millisecond; // the colon blinks with the seconds
+        next = (60 - t.Second) * 1000 - t.Millisecond; // nothing but the pet changes before the next minute
         if (brightness <= 0.004f)
             return c.ToRgb565();
 
@@ -227,7 +227,7 @@ sealed class ClockScreen : IScreen
         return Clock24 ? t.ToString("HH:mm") : t.ToString("h:mm");
     }
 
-    // the time with its colon dimmed every other second; returns its width
+    // the time, drawn in three pieces so the colon sits a little apart; returns its width
     float DrawTime(DateTime t, Font font, float x, float y, Color color, bool alignCenter)
     {
         string text = TimeText(t);
@@ -239,7 +239,7 @@ sealed class ClockScreen : IScreen
         if (alignCenter)
             x -= width / 2;
         g.DrawString(a, font, c.Brush(color), x, y, tight);
-        g.DrawString(":", font, c.Brush(Color.FromArgb(t.Second % 2 == 0 ? 255 : 90, color)), x + wa + gap, y, tight);
+        g.DrawString(":", font, c.Brush(color), x + wa + gap, y, tight);
         g.DrawString(b, font, c.Brush(color), x + wa + wc + gap * 2, y, tight);
         if (!Clock24)
             g.DrawString(t.ToString("tt", CultureInfo.InvariantCulture), tiny, c.Brush(Canvas.Dim), x + width + 4, y + font.Size * 0.15f, tight);
