@@ -1,0 +1,13 @@
+{
+  "name": "celebrating",
+  "source": "clawd-pet@b208f0c/clawd-celebrating.svg",
+  "frameWidth": 105,
+  "frameHeight": 126,
+  "columns": 10,
+  "frames": 30,
+  "frameMs": 66.67,
+  "loopMs": 2000,
+  "seamless": false,
+  "scale": 3,
+  "removedBackgrounds": 0
+}

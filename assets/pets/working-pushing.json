@@ -1,0 +1,13 @@
+{
+  "name": "working-pushing",
+  "source": "clawd-pet@b208f0c/clawd-working-pushing.svg",
+  "frameWidth": 138,
+  "frameHeight": 132,
+  "columns": 10,
+  "frames": 90,
+  "frameMs": 66.67,
+  "loopMs": 6000,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

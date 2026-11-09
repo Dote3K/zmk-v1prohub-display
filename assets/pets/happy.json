@@ -1,0 +1,13 @@
+{
+  "name": "happy",
+  "source": "clawd-pet@b208f0c/clawd-happy.svg",
+  "frameWidth": 128,
+  "frameHeight": 108,
+  "columns": 10,
+  "frames": 90,
+  "frameMs": 66.67,
+  "loopMs": 6000,
+  "seamless": true,
+  "scale": 4,
+  "removedBackgrounds": 0
+}

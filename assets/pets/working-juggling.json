@@ -1,0 +1,13 @@
+{
+  "name": "working-juggling",
+  "source": "clawd-pet@b208f0c/clawd-working-juggling.svg",
+  "frameWidth": 140,
+  "frameHeight": 133,
+  "columns": 10,
+  "frames": 18,
+  "frameMs": 66.67,
+  "loopMs": 1200,
+  "seamless": true,
+  "scale": 7,
+  "removedBackgrounds": 0
+}

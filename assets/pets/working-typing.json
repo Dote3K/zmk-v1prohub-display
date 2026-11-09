@@ -1,0 +1,13 @@
+{
+  "name": "working-typing",
+  "source": "clawd-pet@b208f0c/clawd-working-typing.svg",
+  "frameWidth": 144,
+  "frameHeight": 132,
+  "columns": 10,
+  "frames": 90,
+  "frameMs": 66.67,
+  "loopMs": 6000,
+  "seamless": false,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

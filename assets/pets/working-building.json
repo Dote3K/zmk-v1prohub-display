@@ -1,0 +1,13 @@
+{
+  "name": "working-building",
+  "source": "clawd-pet@b208f0c/clawd-working-building.svg",
+  "frameWidth": 128,
+  "frameHeight": 84,
+  "columns": 10,
+  "frames": 15,
+  "frameMs": 66.67,
+  "loopMs": 1000,
+  "seamless": true,
+  "scale": 4,
+  "removedBackgrounds": 0
+}

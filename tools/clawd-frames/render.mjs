@@ -12,7 +12,7 @@
 // Frames are not screen-recorded: every animation is paused and seeked to the exact frame time, so the
 // output is identical on any machine and the last frame flows into the first.
 // Uses the installed Edge (or Chrome) through playwright-core, so no browser download is needed.
-// The character belongs to Anthropic; keep the generated files out of the repository (assets/ is ignored).
+// The character belongs to Anthropic; see assets/README.md for the credits that go with the files.
 
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, basename } from "node:path";

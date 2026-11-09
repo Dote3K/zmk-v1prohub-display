@@ -1,0 +1,13 @@
+{
+  "name": "working-context-full",
+  "source": "clawd-pet@b208f0c/clawd-working-context-full.svg",
+  "frameWidth": 133,
+  "frameHeight": 147,
+  "columns": 10,
+  "frames": 39,
+  "frameMs": 66.67,
+  "loopMs": 2600,
+  "seamless": false,
+  "scale": 7,
+  "removedBackgrounds": 0
+}

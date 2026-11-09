@@ -1,0 +1,13 @@
+{
+  "name": "telescope",
+  "source": "clawd-pet@b208f0c/clawd-telescope.svg",
+  "frameWidth": 112,
+  "frameHeight": 124,
+  "columns": 10,
+  "frames": 75,
+  "frameMs": 66.67,
+  "loopMs": 5000,
+  "seamless": false,
+  "scale": 4,
+  "removedBackgrounds": 0
+}

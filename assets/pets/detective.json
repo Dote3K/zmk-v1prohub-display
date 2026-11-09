@@ -1,0 +1,13 @@
+{
+  "name": "detective",
+  "source": "clawd-pet@b208f0c/clawd-detective.svg",
+  "frameWidth": 138,
+  "frameHeight": 102,
+  "columns": 10,
+  "frames": 60,
+  "frameMs": 66.67,
+  "loopMs": 4000,
+  "seamless": false,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

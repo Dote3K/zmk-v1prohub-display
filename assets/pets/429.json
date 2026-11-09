@@ -1,0 +1,13 @@
+{
+  "name": "429",
+  "source": "clawd-pet@b208f0c/clawd-429.svg",
+  "frameWidth": 114,
+  "frameHeight": 132,
+  "columns": 8,
+  "frames": 8,
+  "frameMs": 62.5,
+  "loopMs": 500,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

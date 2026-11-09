@@ -1,0 +1,13 @@
+{
+  "name": "503",
+  "source": "clawd-pet@b208f0c/clawd-503.svg",
+  "frameWidth": 126,
+  "frameHeight": 132,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

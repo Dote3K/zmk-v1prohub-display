@@ -1,0 +1,13 @@
+{
+  "name": "idle-living",
+  "source": "clawd-pet@b208f0c/clawd-idle-living.svg",
+  "frameWidth": 147,
+  "frameHeight": 105,
+  "columns": 10,
+  "frames": 240,
+  "frameMs": 66.67,
+  "loopMs": 16000,
+  "seamless": true,
+  "scale": 7,
+  "removedBackgrounds": 0
+}

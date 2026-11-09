@@ -1,0 +1,13 @@
+{
+  "name": "working-thinking",
+  "source": "clawd-pet@b208f0c/clawd-working-thinking.svg",
+  "frameWidth": 126,
+  "frameHeight": 150,
+  "columns": 10,
+  "frames": 120,
+  "frameMs": 66.67,
+  "loopMs": 8000,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "401",
+  "source": "clawd-pet@b208f0c/clawd-401.svg",
+  "frameWidth": 108,
+  "frameHeight": 132,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}
