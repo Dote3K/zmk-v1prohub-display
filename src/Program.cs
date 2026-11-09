@@ -17,6 +17,7 @@ static class Program
     static readonly byte[] lastFrame = new byte[Hub.FrameBytes]; // own copy: the renderer reuses its buffer
     static bool haveFrame;
 
+    [STAThread] // the tray menu needs a single-threaded apartment
     static int Main(string[] args)
     {
         // Claude Code integration; first, since --hook and --statusline run on every event and should be quick
@@ -103,7 +104,12 @@ static class Program
             return reply;
         }).Start();
 
-        Run();
+        // the dongle is read on its own thread; this one runs the tray icon until "Quit" is picked
+        Thread keyboard = new Thread(Run);
+        keyboard.IsBackground = true;
+        keyboard.Start();
+        using (new Tray(manager))
+            System.Windows.Forms.Application.Run();
         GC.KeepAlive(timer);
         GC.KeepAlive(watch);
         GC.KeepAlive(single);
