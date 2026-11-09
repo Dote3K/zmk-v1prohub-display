@@ -6,7 +6,9 @@ using System.Drawing.Text;
 // What the Claude Code screen shows at one moment.
 sealed class ClaudeView
 {
+    public string Header = "CLAUDE CODE"; // top line, e.g. the project name
     public string Pet = "";          // sprite name, e.g. "working-typing"
+    public double PetStart;          // clock ms the pet's animation started at, so a new state starts at frame 0
     public string State = "";        // one big word: WORKING, NEEDS YOU, DONE ...
     public string Detail = "";       // e.g. "Bash · npm test"
     public string Sub = "";          // e.g. "2:14 · 9 tools"
@@ -73,6 +75,9 @@ sealed class ClaudeScreen : IDisposable
         this.petDir = petDir;
     }
 
+    // drawn when a state's own pet has not been rendered into the pets folder
+    const string FallbackPet = "loading";
+
     public Sprite Pet(string name)
     {
         Sprite s;
@@ -88,7 +93,7 @@ sealed class ClaudeScreen : IDisposable
         if (v.Screen <= 0.004f)
             return c.ToRgb565();
 
-        Sprite pet = Pet(v.Pet);
+        Sprite pet = Pet(v.Pet) ?? Pet(FallbackPet);
         if (pet != null)
             pet.Draw(g, pet.FrameAt(ms), Math.Max(0, (PetArea - pet.Width) / 2), Math.Max(0, (H - pet.Height) / 2));
 
@@ -96,7 +101,7 @@ sealed class ClaudeScreen : IDisposable
         // smeared across two rows. (The keyboard screen keeps free positioning for its gliding names.)
         TextRenderingHint hint = g.TextRenderingHint;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        g.DrawString("CLAUDE CODE", small, c.Brush(Canvas.Dim), new RectangleF(Col, 2, ColW, 22), line);
+        g.DrawString(v.Header.ToUpperInvariant(), small, c.Brush(Canvas.Dim), new RectangleF(Col, 2, ColW, 22), line);
 
         string state = v.State.ToUpperInvariant();
         g.DrawString(state, StateFont(state), c.Brush(v.StateColor), new RectangleF(Col - 2, 26, ColW + 4, 40), line);

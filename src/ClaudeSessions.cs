@@ -1,0 +1,379 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text.RegularExpressions;
+
+// Follows Claude Code sessions through their hook events and the status line, and decides what the
+// Claude screen shows. Times are the app's monotonic clock in ms; quota reset times are Unix seconds.
+sealed class ClaudeSessions
+{
+    enum Phase { Idle, Thinking, Working, NeedsYou, Done, Error }
+
+    sealed class Session
+    {
+        public string Id, Project = "";
+        public Phase Phase = Phase.Idle;
+        public string Pet = "", State = "", Detail = "", Error = "";
+        public double PromptAt = -1, PhaseAt, PetAt, LastAt, StopAt = double.NegativeInfinity, TurnMs;
+        public int Tools;
+    }
+
+    const double StaleMs = 10 * 60000;       // thinking or working with no events: interrupted (Esc fires no Stop)
+    const double WaitMs = 2 * 3600000.0;      // a question nobody answered
+    const double ShowDoneMs = 2 * 60000;      // how long DONE and ERROR stay up
+    const double ForgetMs = 12 * 3600000.0;   // no events at all, SessionEnd never came
+    const double CelebrateMs = 3500;          // then the DONE pet calms down
+    const double LateToolMs = 3000;           // hooks run in parallel, so tool events can trail the Stop
+
+    readonly object sync = new object();
+    readonly Dictionary<string, Session> sessions = new Dictionary<string, Session>();
+    double quota5h = -1, quota7d = -1, reset5h, reset7d;
+
+    public void Hook(Dictionary<string, object> e, double now)
+    {
+        string id = Str(e, "session_id"), name = Str(e, "hook_event_name");
+        if (id.Length == 0 || name.Length == 0)
+            return;
+        lock (sync)
+        {
+            Session s;
+            if (!sessions.TryGetValue(id, out s))
+            {
+                if (name == "SessionEnd")
+                    return;
+                sessions[id] = s = new Session { Id = id };
+            }
+            string cwd = Str(e, "cwd").TrimEnd('/', '\\');
+            if (cwd.Length > 0)
+                s.Project = cwd.Substring(Math.Max(cwd.LastIndexOf('/'), cwd.LastIndexOf('\\')) + 1);
+            s.LastAt = now;
+            bool late = now - s.StopAt < LateToolMs;
+
+            switch (name)
+            {
+                case "SessionEnd":
+                    sessions.Remove(id);
+                    break;
+                case "UserPromptSubmit":
+                    s.PromptAt = now;
+                    s.Tools = 0;
+                    s.StopAt = double.NegativeInfinity;
+                    Set(s, Phase.Thinking, "loading", "THINKING", OneLine(Str(e, "prompt")), now);
+                    break;
+                case "PreToolUse":
+                    if (late)
+                        break;
+                    s.Tools++;
+                    Tool(s, Str(e, "tool_name"), e.ContainsKey("tool_input") ? e["tool_input"] as Dictionary<string, object> : null, now);
+                    break;
+                case "PostToolUse":
+                case "PostToolUseFailure":
+                    if (!late && s.Phase == Phase.NeedsYou)
+                        Set(s, Phase.Working, s.Pet == "notification" ? "loading" : s.Pet, "WORKING", s.Detail, now); // permission answered
+                    break;
+                case "PreCompact":
+                    Set(s, Phase.Working, "working-context-full", "COMPACTING", "Summarizing the conversation", now);
+                    break;
+                case "Notification":
+                    string type = Str(e, "notification_type");
+                    if (type == "permission_prompt" || type == "elicitation_dialog" || type == "agent_needs_input")
+                        Set(s, Phase.NeedsYou, "notification", "NEEDS YOU", OneLine(Str(e, "message")), now);
+                    break;
+                case "Stop":
+                    s.StopAt = now;
+                    s.TurnMs = s.PromptAt >= 0 ? now - s.PromptAt : 0;
+                    Set(s, Phase.Done, "celebrating", "DONE", "", now);
+                    break;
+                case "StopFailure":
+                    s.StopAt = now;
+                    string error = Str(e, "error");
+                    Set(s, Phase.Error, ErrorPet(error), ErrorTitle(error), OneLine(Str(e, "last_assistant_message")), now);
+                    s.Error = OneLine(Str(e, "error_details"));
+                    break;
+            }
+        }
+    }
+
+    static void Set(Session s, Phase phase, string pet, string state, string detail, double now)
+    {
+        if (s.Phase != phase)
+            s.PhaseAt = now;
+        if (s.Pet != pet)
+            s.PetAt = now;
+        s.Phase = phase;
+        s.Pet = pet;
+        s.State = state;
+        s.Detail = detail;
+    }
+
+    // What the tool is doing, in a word and a short argument, and which pet acts it out.
+    static void Tool(Session s, string tool, Dictionary<string, object> input, double now)
+    {
+        string pet, verb, arg;
+        switch (tool)
+        {
+            case "Bash":
+            case "PowerShell":
+                arg = Str(input, "command");
+                string c = arg.ToLowerInvariant();
+                pet = Regex.IsMatch(c, @"\btest|\bpytest|\bjest|\bvitest") ? "working-testing"
+                    : c.Contains("git push") ? "working-pushing"
+                    : c.Contains("git merge") || c.Contains("git rebase") ? "working-merging"
+                    : "working-typing";
+                verb = "RUNNING";
+                break;
+            case "Edit":
+            case "Write":
+            case "MultiEdit":
+            case "NotebookEdit":
+                arg = FileName(Str(input, "file_path").Length > 0 ? Str(input, "file_path") : Str(input, "notebook_path"));
+                pet = "working-building";
+                verb = "EDITING";
+                break;
+            case "Read":
+                arg = FileName(Str(input, "file_path"));
+                pet = "reading";
+                verb = "READING";
+                break;
+            case "Grep":
+            case "Glob":
+                arg = Str(input, "pattern");
+                pet = "detective";
+                verb = "SEARCHING";
+                break;
+            case "WebFetch":
+                Uri uri;
+                arg = Uri.TryCreate(Str(input, "url"), UriKind.Absolute, out uri) ? uri.Host : "";
+                pet = "telescope";
+                verb = "BROWSING";
+                break;
+            case "WebSearch":
+                arg = Str(input, "query");
+                pet = "telescope";
+                verb = "SEARCHING";
+                break;
+            case "Task":
+            case "Agent":
+                arg = Str(input, "description");
+                pet = "working-juggling";
+                verb = "DELEGATING";
+                break;
+            default:
+                arg = "";
+                pet = "working-tool-calling";
+                verb = "WORKING";
+                break;
+        }
+        // mcp__server__tool reads as just "tool"
+        string label = tool.StartsWith("mcp__") ? tool.Substring(tool.LastIndexOf("__", StringComparison.Ordinal) + 2) : tool;
+        arg = OneLine(arg);
+        Set(s, Phase.Working, pet, verb, arg.Length > 0 ? label + " · " + arg : label, now);
+    }
+
+    static string ErrorPet(string error)
+    {
+        switch (error)
+        {
+            case "rate_limit": return "429";
+            case "overloaded": return "503";
+            case "server_error": return "500";
+            case "authentication_failed":
+            case "oauth_org_not_allowed": return "401";
+            default: return "error";
+        }
+    }
+
+    static string ErrorTitle(string error)
+    {
+        switch (error)
+        {
+            case "rate_limit": return "RATE LIMIT";
+            case "overloaded": return "OVERLOADED";
+            case "billing_error":
+            case "account_on_hold": return "BILLING";
+            case "authentication_failed":
+            case "oauth_org_not_allowed": return "SIGNED OUT";
+            default: return "ERROR";
+        }
+    }
+
+    // Takes the status line's JSON (quota, model, context) and returns the line Claude Code prints.
+    public string StatusLine(Dictionary<string, object> e)
+    {
+        double used5h = Num(e, "rate_limits", "five_hour", "used_percentage"), used7d = Num(e, "rate_limits", "seven_day", "used_percentage");
+        lock (sync)
+        {
+            if (!double.IsNaN(used5h))
+            {
+                quota5h = used5h;
+                reset5h = Num(e, "rate_limits", "five_hour", "resets_at");
+            }
+            if (!double.IsNaN(used7d))
+            {
+                quota7d = used7d;
+                reset7d = Num(e, "rate_limits", "seven_day", "resets_at");
+            }
+        }
+
+        List<string> parts = new List<string>();
+        string model = Str(e, "model", "display_name");
+        if (model.Length > 0)
+            parts.Add(model);
+        double ctx = Num(e, "context_window", "used_percentage");
+        if (!double.IsNaN(ctx))
+            parts.Add("ctx " + Math.Round(ctx) + "%");
+        if (!double.IsNaN(used5h))
+            parts.Add("5h " + Math.Round(used5h) + "%");
+        if (!double.IsNaN(used7d))
+            parts.Add("7d " + Math.Round(used7d) + "%");
+        return string.Join(" · ", parts.ToArray());
+    }
+
+    // The most urgent session that has something going on, or null when the keyboard screen should stay.
+    public ClaudeView Current(double now)
+    {
+        lock (sync)
+        {
+            Session best = null;
+            int bestRank = 0, busy = 0;
+            List<string> gone = new List<string>();
+            foreach (Session s in sessions.Values)
+            {
+                if (now - s.LastAt > ForgetMs)
+                {
+                    gone.Add(s.Id);
+                    continue;
+                }
+                int rank = Rank(s, now);
+                if (rank == 0)
+                    continue;
+                busy++;
+                if (rank > bestRank || (rank == bestRank && s.LastAt > best.LastAt))
+                {
+                    best = s;
+                    bestRank = rank;
+                }
+            }
+            foreach (string id in gone)
+                sessions.Remove(id);
+            return best == null ? null : View(best, now, busy - 1);
+        }
+    }
+
+    static int Rank(Session s, double now)
+    {
+        switch (s.Phase)
+        {
+            case Phase.NeedsYou: return now - s.LastAt < WaitMs ? 5 : 0;
+            case Phase.Error: return now - s.PhaseAt < ShowDoneMs ? 4 : 0;
+            case Phase.Working:
+            case Phase.Thinking: return now - s.LastAt < StaleMs ? 3 : 0;
+            case Phase.Done: return now - s.PhaseAt < ShowDoneMs ? 2 : 0;
+            default: return 0;
+        }
+    }
+
+    ClaudeView View(Session s, double now, int others)
+    {
+        ClaudeView v = new ClaudeView
+        {
+            Header = (s.Project.Length > 0 ? s.Project : "Claude Code") + (others > 0 ? "  +" + others : ""),
+            Pet = s.Pet,
+            PetStart = s.PetAt,
+            State = s.State,
+            Detail = s.Detail,
+        };
+        switch (s.Phase)
+        {
+            case Phase.Thinking:
+            case Phase.Working:
+                v.Sub = (s.PromptAt >= 0 ? Clock(now - s.PromptAt) + " · " : "") + Count(s.Tools);
+                break;
+            case Phase.NeedsYou:
+                v.StateColor = ClaudeView.Clay;
+                v.Sub = "waiting " + Clock(now - s.PhaseAt);
+                break;
+            case Phase.Done:
+                if (now - s.PetAt > CelebrateMs)
+                {
+                    v.Pet = "happy";
+                    v.PetStart = s.PetAt + CelebrateMs;
+                }
+                v.Detail = (s.TurnMs > 0 ? Duration(s.TurnMs) + " · " : "") + Count(s.Tools);
+                v.Sub = "your turn";
+                break;
+            case Phase.Error:
+                v.StateColor = ClaudeView.Red;
+                v.Sub = s.Error;
+                break;
+        }
+
+        // a window whose reset time has passed no longer says anything
+        double unix = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+        v.Quota5h = quota5h >= 0 && !(reset5h > 0 && unix > reset5h) ? (int)Math.Round(quota5h) : -1;
+        v.Quota7d = quota7d >= 0 && !(reset7d > 0 && unix > reset7d) ? (int)Math.Round(quota7d) : -1;
+        return v;
+    }
+
+    static string Count(int tools)
+    {
+        return tools == 1 ? "1 tool" : tools + " tools";
+    }
+
+    // 2:05, or 1:02:05 past an hour
+    static string Clock(double ms)
+    {
+        TimeSpan t = TimeSpan.FromMilliseconds(Math.Max(0, ms));
+        return t.TotalHours >= 1 ? string.Format("{0}:{1:00}:{2:00}", (int)t.TotalHours, t.Minutes, t.Seconds)
+            : string.Format("{0}:{1:00}", t.Minutes, t.Seconds);
+    }
+
+    // 45s, 3m 12s, 1h 05m
+    static string Duration(double ms)
+    {
+        TimeSpan t = TimeSpan.FromMilliseconds(Math.Max(0, ms));
+        if (t.TotalHours >= 1)
+            return string.Format("{0}h {1:00}m", (int)t.TotalHours, t.Minutes);
+        if (t.TotalMinutes >= 1)
+            return string.Format("{0}m {1}s", t.Minutes, t.Seconds);
+        return t.Seconds + "s";
+    }
+
+    static string FileName(string path)
+    {
+        path = path.TrimEnd('/', '\\');
+        return path.Substring(Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\')) + 1);
+    }
+
+    // first line, spaces collapsed, cut short: enough to recognize, little enough to leak
+    static string OneLine(string s)
+    {
+        s = Regex.Replace(s, @"\s+", " ").Trim();
+        return s.Length > 80 ? s.Substring(0, 80) : s;
+    }
+
+    static object Get(Dictionary<string, object> d, string[] path)
+    {
+        object o = d;
+        foreach (string key in path)
+        {
+            Dictionary<string, object> m = o as Dictionary<string, object>;
+            if (m == null || !m.TryGetValue(key, out o))
+                return null;
+        }
+        return o;
+    }
+
+    static string Str(Dictionary<string, object> d, params string[] path)
+    {
+        return d == null ? "" : Get(d, path) as string ?? "";
+    }
+
+    static double Num(Dictionary<string, object> d, params string[] path)
+    {
+        object o = d == null ? null : Get(d, path);
+        if (o is int || o is long || o is decimal || o is double)
+            return Convert.ToDouble(o, CultureInfo.InvariantCulture);
+        return double.NaN;
+    }
+}
