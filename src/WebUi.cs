@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Imaging;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+
+// The newest frame on the hub once it is newer than seen, or after timeoutMs either way (Program.NextFrame).
+delegate byte[] FrameSource(ref long seen, int timeoutMs);
 
 // The settings window: one HTML page built into the exe (src/ui/settings.html), served on the local
 // server and opened in an app window of the browser. The page draws itself from the Field descriptions
@@ -18,14 +20,14 @@ using System.Text;
 sealed class WebUi
 {
     readonly ScreenManager manager;
-    readonly Func<byte[]> lastFrame;   // RGB565 copy of what the hub shows, null before the first frame
+    readonly FrameSource nextFrame;
     readonly Func<bool> lit;
     readonly string token;
 
-    public WebUi(ScreenManager manager, Func<byte[]> lastFrame, Func<bool> lit)
+    public WebUi(ScreenManager manager, FrameSource nextFrame, Func<bool> lit)
     {
         this.manager = manager;
-        this.lastFrame = lastFrame;
+        this.nextFrame = nextFrame;
         this.lit = lit;
         byte[] random = new byte[16];
         using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
@@ -86,8 +88,8 @@ sealed class WebUi
             return Page(Html());
         if (r.Method == "GET" && r.Path == "/api/model")
             return Response.Json(Model());
-        if (r.Method == "GET" && r.Path == "/api/frame.png")
-            return Frame();
+        if (r.Method == "GET" && r.Path == "/api/stream")
+            return Stream();
         if (r.Method != "POST")
             return Response.Error("405 Method Not Allowed");
 
@@ -193,46 +195,40 @@ sealed class WebUi
         return d;
     }
 
-    // what the hub shows right now, as a PNG; X-Lit says whether the panel is on
-    Response Frame()
+    // The hub's picture, live: one message per frame, as soon as the hub gets it (at most 30 a second,
+    // and at least one a second so a change of the panel's power shows too). A message is one byte,
+    // 1 when the panel is lit, then the frame as the hub's big-endian RGB565. Raw is cheaper than any
+    // image format here, and the page draws it pixel for pixel.
+    Response Stream()
     {
-        byte[] rgb565 = lastFrame();
-        using (Bitmap bmp = new Bitmap(Hub.Width, Hub.Height, PixelFormat.Format24bppRgb))
+        Response res = new Response { Type = "application/octet-stream" };
+        res.Headers["Cache-Control"] = "no-store";
+        res.Stream = net =>
         {
-            if (rgb565 != null)
+            long seen = -1;
+            byte[] message = new byte[1 + Hub.FrameBytes];
+            Stopwatch clock = Stopwatch.StartNew();
+            while (true) // ends when the window closes and a write fails
             {
-                BitmapData data = bmp.LockBits(new Rectangle(0, 0, Hub.Width, Hub.Height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
-                byte[] row = new byte[data.Stride];
-                for (int y = 0, i = 0; y < Hub.Height; y++)
-                {
-                    for (int x = 0; x < Hub.Width; x++, i += 2)
-                    {
-                        int v = rgb565[i] << 8 | rgb565[i + 1]; // the hub's big-endian RGB565
-                        int r = v >> 11 & 31, g = v >> 5 & 63, b = v & 31;
-                        row[x * 3] = (byte)(b << 3 | b >> 2);
-                        row[x * 3 + 1] = (byte)(g << 2 | g >> 4);
-                        row[x * 3 + 2] = (byte)(r << 3 | r >> 2);
-                    }
-                    Marshal.Copy(row, 0, data.Scan0 + y * data.Stride, data.Stride);
-                }
-                bmp.UnlockBits(data);
+                double started = clock.Elapsed.TotalMilliseconds;
+                byte[] frame = nextFrame(ref seen, 1000);
+                message[0] = (byte)(lit() ? 1 : 0);
+                if (frame != null)
+                    Buffer.BlockCopy(frame, 0, message, 1, Hub.FrameBytes);
+                net.Write(message, 0, message.Length);
+                int rest = 33 - (int)(clock.Elapsed.TotalMilliseconds - started);
+                if (rest > 0)
+                    Thread.Sleep(rest);
             }
-            using (MemoryStream png = new MemoryStream())
-            {
-                bmp.Save(png, ImageFormat.Png);
-                Response res = new Response { Type = "image/png", Body = png.ToArray() };
-                res.Headers["Cache-Control"] = "no-store";
-                res.Headers["X-Lit"] = lit() ? "1" : "0";
-                return res;
-            }
-        }
+        };
+        return res;
     }
 
     static Response Page(string html)
     {
         Response res = new Response { Type = "text/html; charset=utf-8", Body = Encoding.UTF8.GetBytes(html) };
         // everything the page needs is inline; nothing else may load, and it may not be framed
-        res.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'";
+        res.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'self'; frame-ancestors 'none'";
         res.Headers["Cache-Control"] = "no-store";
         res.Headers["Referrer-Policy"] = "no-referrer";
         return res;

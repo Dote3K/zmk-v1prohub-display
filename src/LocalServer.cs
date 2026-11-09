@@ -32,6 +32,7 @@ sealed class Response
     public string Type = "text/plain; charset=utf-8";
     public byte[] Body = new byte[0];
     public Dictionary<string, string> Headers = new Dictionary<string, string>();
+    public Action<Stream> Stream;   // instead of Body: writes until it returns or the client goes away
 
     public static Response Text(string text)
     {
@@ -257,12 +258,16 @@ sealed class LocalServer
 
     static void Write(Stream net, Response res)
     {
+        // a stream has no length: its body simply ends when the connection closes
         StringBuilder head = new StringBuilder("HTTP/1.1 " + res.Status + "\r\nContent-Type: " + res.Type +
-            "\r\nContent-Length: " + res.Body.Length + "\r\nConnection: close\r\n");
+            (res.Stream == null ? "\r\nContent-Length: " + res.Body.Length : "") + "\r\nConnection: close\r\n");
         foreach (KeyValuePair<string, string> h in res.Headers)
             head.Append(h.Key).Append(": ").Append(h.Value).Append("\r\n");
         WriteAscii(net, head.Append("\r\n").ToString());
-        net.Write(res.Body, 0, res.Body.Length);
+        if (res.Stream != null)
+            res.Stream(net);
+        else
+            net.Write(res.Body, 0, res.Body.Length);
     }
 
     static void WriteAscii(Stream net, string ascii)

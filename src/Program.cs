@@ -101,7 +101,7 @@ static class Program
             if (c.ToJson() != manager.Config.ToJson()) // our own saves come back here too
                 manager.Configure(c);
         });
-        ui = new WebUi(manager, Snapshot, () => manager.Lit);
+        ui = new WebUi(manager, NextFrame,() => manager.Lit);
         if (new LocalServer(r => ui.Handle(r) ?? Claude(r, sessions)).Start())
             ui.Publish();
         if (args.Length == 1 && args[0] == "--settings")
@@ -142,11 +142,19 @@ static class Program
         return Response.Text(reply);
     }
 
-    // a copy of the frame last sent to the hub, null before the first one
-    static byte[] Snapshot()
+    static long frameVersion; // counts frames handed to Push
+
+    // A copy of the newest frame once there is one newer than seen, or after timeoutMs either way;
+    // null before the first frame.
+    static byte[] NextFrame(ref long seen, int timeoutMs)
     {
         lock (hubLock)
+        {
+            if (frameVersion == seen)
+                Monitor.Wait(hubLock, timeoutMs);
+            seen = frameVersion;
             return haveFrame ? (byte[])lastFrame.Clone() : null;
+        }
     }
 
     // A demo state by its word ("working", "needs you") or pet ("detective"); otherwise the named pet
@@ -282,6 +290,8 @@ static class Program
             {
                 Buffer.BlockCopy(frame, 0, lastFrame, 0, Hub.FrameBytes);
                 haveFrame = true;
+                frameVersion++;
+                Monitor.PulseAll(hubLock); // the settings window's live picture
             }
             if (!haveFrame || (!screenOn && backlightOff))
                 return;

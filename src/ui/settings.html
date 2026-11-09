@@ -46,8 +46,9 @@ nav { background: var(--side); border-right: 1px solid var(--line-soft); display
 
 /* ---- the hub picture ---- */
 .hub { background: #070707; border: 1px solid var(--line); border-radius: 12px; padding: 8px; position: relative; }
-.hub img { display: block; width: 100%; aspect-ratio: 320 / 170; image-rendering: pixelated; border-radius: 4px; background: #000; transition: opacity .3s; }
-.hub.off img { opacity: .3; }
+/* sized by fit() to a whole number of screen pixels per hub pixel, so it stays sharp */
+.hub canvas { display: block; margin: 0 auto; image-rendering: pixelated; background: #000; transition: opacity .3s; }
+.hub.off canvas { opacity: .3; }
 .hub .off-note { position: absolute; inset: 0; display: none; place-items: center; color: var(--muted); font-size: 13px; }
 .hub.off .off-note { display: grid; }
 .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-top: 10px; }
@@ -63,7 +64,7 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
 header h1 { font-size: 24px; font-weight: 600; margin: 0; line-height: 1.2; }
 header p { margin: 2px 0 0; color: var(--muted); }
 header .grow { flex: 1; min-width: 0; }
-.hero { margin: 0 auto 32px; max-width: 460px; }
+.hero { margin: 0 0 32px; }
 .hero .status { justify-content: center; }
 .hero .hub { padding: 10px; }
 
@@ -266,11 +267,26 @@ function sectionBlock(title, ...cards) {
   return el("section", {}, title ? el("h2", {}, title) : null, ...cards);
 }
 
-function hubPicture() {
-  return el("div", { class: "hub", id: "hubbox" },
-    el("img", { id: "frame", alt: "What the hub shows" }),
-    el("div", { class: "off-note" }, "Screen off"));
+// One picture, moved between the overview and the sidebar, so redrawing the page never blanks it.
+const hubCanvas = el("canvas", { width: 320, height: 170, role: "img", "aria-label": "What the hub shows" });
+const hubBox = el("div", { class: "hub" }, hubCanvas, el("div", { class: "off-note" }, "Screen off"));
+const hubCtx = hubCanvas.getContext("2d");
+const hubImage = hubCtx.createImageData(320, 170);
+new ResizeObserver(fit).observe(hubBox);
+
+// the largest whole number of device pixels per hub pixel that fits the box
+function fit() {
+  const dpr = window.devicePixelRatio || 1;
+  const room = hubBox.clientWidth - 16;
+  if (room <= 0) return;
+  // narrower than the hub itself (the sidebar): shrink smoothly to fit instead
+  const k = room * dpr >= 320 ? Math.floor(room * dpr / 320) : room * dpr / 320;
+  hubCanvas.style.imageRendering = k >= 1 ? "pixelated" : "auto";
+  hubCanvas.style.width = (320 * k / dpr) + "px";
+  hubCanvas.style.height = (170 * k / dpr) + "px";
 }
+
+function hubPicture() { return hubBox; }
 
 function statusLine() {
   const shown = model.screens.find(s => s.id === model.shown);
@@ -328,37 +344,63 @@ function render() {
     head,
     overview ? el("div", { class: "hero" }, hubPicture(), statusLine()) : null,
     ...blocks));
-  if (lastUrl) $("frame").src = lastUrl;
+  fit();
 }
 
-// the hub's picture, a few times a second while the window is visible
-let lastUrl = null;
-async function frame() {
-  if (document.visibilityState === "visible") {
-    try {
-      const res = await fetch("/api/frame.png", { headers: { "X-Hub-Token": token }, cache: "no-store" });
-      if (res.status === 403) { $("gone").classList.add("show"); return; }
-      const url = URL.createObjectURL(await res.blob());
-      const img = $("frame");
-      if (img) img.src = url;
-      if (lastUrl) URL.revokeObjectURL(lastUrl);
-      lastUrl = url;
-      const box = $("hubbox");
-      if (box) box.classList.toggle("off", res.headers.get("X-Lit") === "0");
-    } catch {}
+// The hub's picture as the app streams it: per frame one byte (1 = panel lit) and 320x170 big-endian RGB565.
+const FRAME = 1 + 320 * 170 * 2;
+
+function draw(buf, at) {
+  hubBox.classList.toggle("off", buf[at] === 0);
+  const px = hubImage.data;
+  for (let i = 0, j = at + 1; i < px.length; i += 4, j += 2) {
+    const v = buf[j] << 8 | buf[j + 1];
+    const r = v >> 11 & 31, g = v >> 5 & 63, b = v & 31;
+    px[i] = r << 3 | r >> 2; px[i + 1] = g << 2 | g >> 4; px[i + 2] = b << 3 | b >> 2; px[i + 3] = 255;
   }
-  setTimeout(frame, 200);
+  hubCtx.putImageData(hubImage, 0, 0);
 }
 
+async function stream() {
+  for (;;) {
+    try {
+      const res = await fetch("/api/stream", { headers: { "X-Hub-Token": token }, cache: "no-store" });
+      if (res.status === 403) { $("gone").classList.add("show"); return; }
+      const reader = res.body.getReader();
+      let buf = new Uint8Array(FRAME * 4), have = 0;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (have + value.length > buf.length) { const grown = new Uint8Array((have + value.length) * 2); grown.set(buf.subarray(0, have)); buf = grown; }
+        buf.set(value, have);
+        have += value.length;
+        const whole = Math.floor(have / FRAME);
+        if (whole > 0) {
+          draw(buf, (whole - 1) * FRAME); // only the newest complete frame matters
+          buf.copyWithin(0, whole * FRAME, have);
+          have -= whole * FRAME;
+        }
+      }
+    } catch {}
+    await new Promise(r => setTimeout(r, 1000)); // the app restarted or the connection dropped: try again
+  }
+}
+
+// settings and summaries change rarely: redraw the page only when they did
+let lastModel = "";
 async function refresh() {
   if (!busy && document.visibilityState === "visible") {
-    try { model = await api("/api/model"); render(); } catch {}
+    try {
+      const next = await api("/api/model");
+      const text = JSON.stringify(next);
+      if (text !== lastModel) { lastModel = text; model = next; render(); }
+    } catch {}
   }
   setTimeout(refresh, 2000);
 }
 
 refresh();
-frame();
+stream();
 </script>
 </body>
 </html>
