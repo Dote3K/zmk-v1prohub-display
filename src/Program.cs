@@ -13,9 +13,7 @@ static class Program
     static readonly object hubLock = new object();
     static Canvas canvas;
     static Renderer renderer;
-    static Animator animator;
-    static Display display;
-    static Status lastStatus; // the dongle's latest report, null until it has sent one
+    static ScreenManager manager;
     static readonly byte[] lastFrame = new byte[Hub.FrameBytes]; // own copy: the renderer reuses its buffer
     static bool haveFrame;
 
@@ -46,7 +44,7 @@ static class Program
         // demo state in turn. A name is a demo state (e.g. "working") or any pet in the pets folder.
         if ((args.Length == 3 || args.Length == 4) && args[0] == "--pet-png")
         {
-            using (ClaudeScreen screen = new ClaudeScreen(canvas, Sprite.DefaultDir()))
+            using (ClaudeRenderer screen = new ClaudeRenderer(canvas, Sprite.DefaultDir()))
             {
                 ClaudeView v = DemoView(args[1]);
                 screen.Render(v, args.Length == 4 ? double.Parse(args[3]) : 0);
@@ -62,12 +60,12 @@ static class Program
         // shows the status screen, fades it out and switches the backlight off, then wakes it again
         if (args.Length == 1 && args[0] == "--screen-test")
         {
-            animator = new Animator(renderer, Push, SetScreen);
-            animator.Show(new Status { LayerName = "Base" });
+            manager = new ScreenManager(new KeyboardScreen(renderer), new IScreen[0], new Config(), Push, SetScreen);
+            manager.KeyboardStatus(new Status { LayerName = "Base" });
             Thread.Sleep(2000);
-            animator.Show(new Status { LayerName = "Base", Active = false });
+            manager.KeyboardStatus(new Status { LayerName = "Base", Active = false });
             Thread.Sleep(6000);
-            animator.Show(new Status { LayerName = "Base" });
+            manager.KeyboardStatus(new Status { LayerName = "Base" });
             Thread.Sleep(2000);
             return 0;
         }
@@ -85,19 +83,18 @@ static class Program
         int refresh = args.Length == 2 && args[0] == "--refresh" ? int.Parse(args[1]) : 0;
         Timer timer = refresh > 0 ? new Timer(_ => Push(null), null, refresh * 1000, refresh * 1000) : null;
 
-        // Claude screen: its own canvas, since it renders on its own thread next to the animator
+        // every kind of screen the hub can show; they all draw on the one canvas, from the manager's thread
         ClaudeSessions sessions = new ClaudeSessions();
-        display = new Display(new ClaudeScreen(new Canvas(), Sprite.DefaultDir()), sessions, Push, SetClaudeScreen,
-            () => animator.Show(lastStatus ?? new Status { Active = false }));
-        animator = new Animator(renderer, display.KeyboardFrame, SetScreen);
+        IScreen[] screens = { new ClaudeScreen(new ClaudeRenderer(canvas, Sprite.DefaultDir()), sessions) };
+        manager = new ScreenManager(new KeyboardScreen(renderer), screens, new Config(), Push, SetScreen);
         new ClaudeServer((path, body) =>
         {
             string reply = null;
             if (path == "/hook")
-                sessions.Hook(body, display.Now);
+                sessions.Hook(body, manager.Now);
             else
                 reply = sessions.StatusLine(body);
-            display.ClaudeChanged();
+            manager.Wake();
             return reply;
         }).Start();
 
@@ -120,7 +117,7 @@ static class Program
     // Plays each view for the given seconds, a frame whenever the pet's animation moves on.
     static int PlayClaude(ClaudeView[] views, double seconds)
     {
-        using (ClaudeScreen screen = new ClaudeScreen(canvas, Sprite.DefaultDir()))
+        using (ClaudeRenderer screen = new ClaudeRenderer(canvas, Sprite.DefaultDir()))
         {
             Stopwatch clock = Stopwatch.StartNew();
             foreach (ClaudeView v in views)
@@ -186,11 +183,7 @@ static class Program
                 {
                     Status s = Status.Parse(dongle.Read());
                     if (s != null)
-                    {
-                        display.KeyboardStatus(s);
-                        lastStatus = s;
-                        animator.Show(s);
-                    }
+                        manager.KeyboardStatus(s);
                 }
             }
             catch (IOException) { }
@@ -198,6 +191,7 @@ static class Program
             finally
             {
                 dongle.Dispose();
+                manager.KeyboardGone();
             }
         }
     }
@@ -206,37 +200,17 @@ static class Program
     // state starts unknown (treated as off), so the first push turns it on even if a previous run left it off.
     static bool screenOn = true, backlightOff = true;
 
-    // The keyboard and Claude each say whether they want the panel lit; it is lit while either does.
-    static bool keyboardWantsOn = true, claudeWantsOn;
-
-    // Called by the animator: off once the idle fade-out has finished, on as soon as a fade-in starts.
+    // Called by the screen manager: off once the fade-out has finished, on as soon as a fade-in starts.
     static void SetScreen(bool on)
     {
         lock (hubLock)
         {
-            keyboardWantsOn = on;
-            ApplyScreen();
+            if (screenOn == on)
+                return;
+            screenOn = on;
+            if (!on)
+                Push(null);
         }
-    }
-
-    // Called by the display: on while the Claude screen is up.
-    static void SetClaudeScreen(bool on)
-    {
-        lock (hubLock)
-        {
-            claudeWantsOn = on;
-            ApplyScreen();
-        }
-    }
-
-    static void ApplyScreen()
-    {
-        bool on = keyboardWantsOn || claudeWantsOn;
-        if (screenOn == on)
-            return;
-        screenOn = on;
-        if (!on)
-            Push(null);
     }
 
     // Brightness 0 only sets the hub's screen-off flag and keeps the configured level, so turning the

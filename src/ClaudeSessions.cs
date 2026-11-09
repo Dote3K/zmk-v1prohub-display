@@ -308,11 +308,45 @@ sealed class ClaudeSessions
                 break;
         }
 
-        // a window whose reset time has passed no longer says anything
+        Quotas(v);
+        return v;
+    }
+
+    // The page for when nothing is going on: a sleeping pet, the open sessions and the quota.
+    public ClaudeView Idle(double now)
+    {
+        lock (sync)
+        {
+            Session last = null;
+            foreach (Session s in sessions.Values)
+                if (last == null || s.LastAt > last.LastAt)
+                    last = s;
+            ClaudeView v = new ClaudeView
+            {
+                Header = last != null && last.Project.Length > 0 ? last.Project : "Claude Code",
+                Pet = "sleeping",
+                State = "IDLE",
+                Detail = sessions.Count == 0 ? "no session" : sessions.Count == 1 ? "1 session open" : sessions.Count + " sessions open",
+                Sub = last != null ? "active " + Ago(now - last.LastAt) + " ago" : "",
+            };
+            Quotas(v);
+            return v;
+        }
+    }
+
+    // a window whose reset time has passed no longer says anything
+    void Quotas(ClaudeView v)
+    {
         double unix = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
         v.Quota5h = quota5h >= 0 && !(reset5h > 0 && unix > reset5h) ? (int)Math.Round(quota5h) : -1;
         v.Quota7d = quota7d >= 0 && !(reset7d > 0 && unix > reset7d) ? (int)Math.Round(quota7d) : -1;
-        return v;
+    }
+
+    // 40s, 18m, 3h
+    static string Ago(double ms)
+    {
+        TimeSpan t = TimeSpan.FromMilliseconds(Math.Max(0, ms));
+        return t.TotalHours >= 1 ? (int)t.TotalHours + "h" : t.TotalMinutes >= 1 ? (int)t.TotalMinutes + "m" : (int)t.TotalSeconds + "s";
     }
 
     static string Count(int tools)

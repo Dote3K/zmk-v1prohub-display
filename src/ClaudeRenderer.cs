@@ -36,7 +36,7 @@ sealed class ClaudeView
 }
 
 // Draws the Claude Code screen: the pet on the left, state and quota on the right.
-sealed class ClaudeScreen : IDisposable
+sealed class ClaudeRenderer : IDisposable
 {
     const int W = Canvas.W, H = Canvas.H;
     const int PetArea = 156;               // left column the pet is centered in
@@ -68,7 +68,7 @@ sealed class ClaudeScreen : IDisposable
         LineAlignment = StringAlignment.Center,
     };
 
-    public ClaudeScreen(Canvas canvas, string petDir)
+    public ClaudeRenderer(Canvas canvas, string petDir)
     {
         c = canvas;
         g = canvas.G;
@@ -77,6 +77,13 @@ sealed class ClaudeScreen : IDisposable
 
     // drawn when a state's own pet has not been rendered into the pets folder
     const string FallbackPet = "loading";
+
+    // ms until the pet drawn for this name shows its next frame
+    public double UntilNextFrame(string pet, double ms)
+    {
+        Sprite s = Pet(pet) ?? Pet(FallbackPet);
+        return s != null ? s.UntilNextFrame(ms) : 1000;
+    }
 
     public Sprite Pet(string name)
     {
