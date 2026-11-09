@@ -37,7 +37,10 @@ sealed class KeyboardScreen : IScreen
     public void Show(Status s)
     {
         lock (sync)
+        {
             target = s;
+            reported = true;
+        }
     }
 
     public bool Urgent(double now)
@@ -46,6 +49,19 @@ sealed class KeyboardScreen : IScreen
     }
 
     public bool CanTakeover { get { return false; } }
+
+    bool reported; // the dongle has sent a status since the app started
+
+    public string Summary(double now)
+    {
+        Status s;
+        lock (sync)
+            s = target;
+        if (!reported)
+            return "Waiting for the dongle";
+        Func<int, string> pct = b => b > 0 ? b + "%" : "--";
+        return View.LayerLabel(s) + " · " + pct(s.BatteryLeft) + " · " + pct(s.BatteryRight);
+    }
 
     const string DefaultName = "Cygnus";
 

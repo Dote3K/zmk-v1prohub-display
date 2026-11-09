@@ -19,6 +19,7 @@ sealed class Field
     public Action<object> Set;            // toggle, choice, multi, number, text
     public Func<string> Run;              // button; returns a message for the window
     public Func<bool> Visible;            // null = always shown
+    public string Section = "";           // fields of one section share a card under this heading
 
     public static Field Toggle(string key, string label, string help, Func<bool> get, Action<bool> set)
     {
@@ -58,12 +59,29 @@ sealed class Field
     }
 }
 
-// A section of the settings window: one for the hub as a whole, one per screen that has settings, one
-// for the app.
+// A page of the settings window. Group puts it in the sidebar: "hub" (the overview), "screens" (one page
+// per screen, so a new screen appears there by itself) or "app".
 sealed class Page
 {
-    public string Id, Title, Icon;
+    public string Id, Title, Icon, Group, Summary = "";
+    public string Screen;                 // the screen this page is about, if any
     public List<Field> Fields = new List<Field>();
+
+    public Page Add(string section, IEnumerable<Field> fields)
+    {
+        foreach (Field f in fields)
+        {
+            if (f.Section.Length == 0)
+                f.Section = section;
+            Fields.Add(f);
+        }
+        return this;
+    }
+
+    public Page Add(string section, params Field[] fields)
+    {
+        return Add(section, (IEnumerable<Field>)fields);
+    }
 }
 
 // The settings everyone shares: the tray menu, the settings window and the screens' own options.
@@ -120,44 +138,76 @@ static class Settings
         });
     }
 
-    // Every page, built fresh so values and visibility are current.
+    // Every page, built fresh so values and visibility are current: the overview, one page per screen
+    // (its place on the hub, then its own settings), and the app.
     public static List<Page> Pages()
     {
-        List<Page> pages = new List<Page> { ScreensPage() };
+        List<Page> pages = new List<Page> { HubPage() };
         foreach (IScreen s in manager.Screens)
-        {
-            IList<Field> fields = s.Fields();
-            if (fields.Count > 0)
-                pages.Add(new Page { Id = s.Id, Title = s.Title, Icon = s.Id, Fields = fields.ToList() });
-        }
-        pages.Add(GeneralPage());
+            pages.Add(ScreenPage(s));
+        pages.Add(AppPage());
         return pages;
     }
 
-    static Page ScreensPage()
+    static Page HubPage()
     {
-        Func<IEnumerable<IScreen>, List<KeyValuePair<string, string>>> choices =
-            list => list.Select(s => new KeyValuePair<string, string>(s.Id, s.Title)).ToList();
-        IList<IScreen> all = manager.Screens;
-        Page p = new Page { Id = "screens", Title = "Screens", Icon = "screens" };
-        p.Fields.Add(Field.Choice("mode", "Mode", "Pin one screen, or rotate through several.",
-            new[] { new KeyValuePair<string, string>("pinned", "Pin one screen"), new KeyValuePair<string, string>("rotate", "Rotate") },
-            () => Current.Mode, v => Edit(c => c.Mode = v == "rotate" ? "rotate" : "pinned")));
-        Field pinned = Field.Choice("pinned", "Pinned screen", "", choices(all), () => Current.Pinned, v => Edit(c => c.Pinned = v));
-        pinned.Visible = () => Current.Mode == "pinned";
-        p.Fields.Add(pinned);
-        Field rotate = Field.Multi("rotate", "Rotate through", "In the order listed.", choices(all), () => Current.Rotate,
-            v => { if (v.Length > 0) Edit(c => c.Rotate = all.Select(s => s.Id).Where(v.Contains).ToArray()); });
-        rotate.Visible = () => Current.Mode == "rotate";
-        p.Fields.Add(rotate);
+        Config c = Current;
+        string[] rotating = c.Rotate.Where(id => manager.Screens.Any(s => s.Id == id)).ToArray();
+        Page p = new Page
+        {
+            Id = "hub", Title = "Overview", Icon = "hub", Group = "hub",
+            Summary = c.Mode == "rotate" ? "Rotating " + rotating.Length + " screens every " + c.RotateSeconds + " s" : "Pinned: " + TitleOf(c.Pinned),
+        };
         Field every = Field.Number("rotateSeconds", "Time per screen", "", 3, 120, 1, "s", () => Current.RotateSeconds,
-            v => Edit(c => c.RotateSeconds = (int)Math.Round(v)));
+            v => Edit(x => x.RotateSeconds = (int)Math.Round(v)));
         every.Visible = () => Current.Mode == "rotate";
-        p.Fields.Add(every);
-        p.Fields.Add(Field.Multi("takeover", "Take over the hub when busy", "These screens come up on their own and keep the panel lit while something needs you, like Claude working or waiting.",
-            choices(all.Where(s => s.CanTakeover)), () => Current.Takeover, v => Edit(c => c.Takeover = v)));
-        p.Fields.Add(Field.Toggle("layerOverlay", "Show the keyboard on layer change", "A layer change or a held modifier shows the keyboard screen for 2 seconds.",
-            () => Current.LayerOverlay, v => Edit(c => c.LayerOverlay = v)));
+        p.Add("Display",
+            Field.Choice("mode", "When nothing needs the hub", "Pin one screen, or take turns. Pick the screens on their own pages.",
+                new[] { new KeyValuePair<string, string>("pinned", "Pin one"), new KeyValuePair<string, string>("rotate", "Rotate") },
+                () => Current.Mode, v => Edit(x => x.Mode = v == "rotate" ? "rotate" : "pinned")),
+            every);
+        p.Add("Interruptions",
+            Field.Toggle("layerOverlay", "Show the keyboard on layer change", "A layer change or a held modifier brings the keyboard screen up for 2 seconds.",
+                () => Current.LayerOverlay, v => Edit(x => x.LayerOverlay = v)));
+        return p;
+    }
+
+    static string TitleOf(string id)
+    {
+        IScreen s = manager.Screens.FirstOrDefault(x => x.Id == id);
+        return s != null ? s.Title : id;
+    }
+
+    // what a screen does on the hub, the same for every screen, then the screen's own settings
+    static Page ScreenPage(IScreen s)
+    {
+        string id = s.Id;
+        Page p = new Page { Id = id, Title = s.Title, Icon = id, Group = "screens", Screen = id, Summary = s.Summary(manager.Now) };
+        List<Field> role = new List<Field>();
+        Field pin = Field.Toggle("pinned", "Pinned", "Shown whenever nothing else needs the hub.", () => Current.Pinned == id, v =>
+        {
+            if (v)
+                Edit(x => x.Pinned = id);
+            else if (Current.Pinned == id && id != "keyboard")
+                Edit(x => x.Pinned = "keyboard"); // something has to be pinned; the keyboard is the fallback
+        });
+        pin.Visible = () => Current.Mode == "pinned";
+        role.Add(pin);
+        Field turn = Field.Toggle("rotation", "In the rotation", "Takes its turn with the other screens.", () => Current.Rotate.Contains(id), v =>
+            Edit(x =>
+            {
+                string[] next = manager.Screens.Select(t => t.Id).Where(t => t == id ? v : x.Rotate.Contains(t)).ToArray();
+                if (next.Length > 0) // the last one stays
+                    x.Rotate = next;
+            }));
+        turn.Visible = () => Current.Mode == "rotate";
+        role.Add(turn);
+        if (s.CanTakeover)
+            role.Add(Field.Toggle("takeover", "Take over when busy", "Comes up on its own and keeps the panel lit while something needs you.",
+                () => Current.Takeover.Contains(id),
+                v => Edit(x => x.Takeover = v ? x.Takeover.Concat(new[] { id }).Distinct().ToArray() : x.Takeover.Where(t => t != id).ToArray())));
+        p.Add("On the hub", role);
+        p.Add("Settings", s.Fields());
         return p;
     }
 
@@ -182,17 +232,18 @@ static class Settings
         }
     }
 
-    static Page GeneralPage()
+    static Page AppPage()
     {
-        Page p = new Page { Id = "general", Title = "General", Icon = "general" };
-        p.Fields.Add(Field.Toggle("autostart", "Start with Windows", "", () => Autostart, v => Autostart = v));
-        p.Fields.Add(Field.Info("config", "Settings file", () => Config.FilePath));
-        p.Fields.Add(Field.Button("openConfig", "Open config.json", "", () =>
-        {
-            Open(Config.FilePath);
-            return "";
-        }));
-        p.Fields.Add(Field.Info("build", "Build", () => File.GetLastWriteTime(Process.GetCurrentProcess().MainModule.FileName).ToString("yyyy-MM-dd HH:mm")));
+        Page p = new Page { Id = "app", Title = "App", Icon = "app", Group = "app", Summary = "Startup and files" };
+        p.Add("Startup", Field.Toggle("autostart", "Start with Windows", "Runs in the tray when you sign in.", () => Autostart, v => Autostart = v));
+        p.Add("Files",
+            Field.Info("config", "Settings file", () => Config.FilePath),
+            Field.Button("openConfig", "Open config.json", "Every setting here lives in this file; edits there apply right away.", () =>
+            {
+                Open(Config.FilePath);
+                return "";
+            }),
+            Field.Info("build", "Build", () => File.GetLastWriteTime(Process.GetCurrentProcess().MainModule.FileName).ToString("yyyy-MM-dd HH:mm")));
         return p;
     }
 

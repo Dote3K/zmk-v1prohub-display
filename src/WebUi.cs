@@ -137,6 +137,8 @@ sealed class WebUi
 
     Dictionary<string, object> Model()
     {
+        Config c = manager.Config;
+        double now = manager.Now;
         return new Dictionary<string, object>
         {
             { "pages", Settings.Pages().Select(p => (object)new Dictionary<string, object>
@@ -144,9 +146,25 @@ sealed class WebUi
                     { "id", p.Id },
                     { "title", p.Title },
                     { "icon", p.Icon },
-                    { "fields", p.Fields.Where(f => f.Visible == null || f.Visible()).Select(f => (object)FieldJson(f)).ToList() },
+                    { "group", p.Group },
+                    { "summary", p.Summary },
+                    { "screen", p.Screen },
+                    // consecutive fields of one section share a card
+                    { "sections", p.Fields.Where(f => f.Visible == null || f.Visible())
+                        .GroupBy(f => f.Section)
+                        .Select(g => (object)new Dictionary<string, object> { { "title", g.Key }, { "fields", g.Select(f => (object)FieldJson(f)).ToList() } })
+                        .ToList() },
                 }).ToList() },
-            { "screens", manager.Screens.Select(s => (object)new Dictionary<string, object> { { "id", s.Id }, { "title", s.Title } }).ToList() },
+            { "screens", manager.Screens.Select(s => (object)new Dictionary<string, object>
+                {
+                    { "id", s.Id },
+                    { "title", s.Title },
+                    { "summary", s.Summary(now) },
+                    { "pinned", c.Mode == "pinned" && c.Pinned == s.Id },
+                    { "rotation", c.Mode == "rotate" && c.Rotate.Contains(s.Id) },
+                    { "takeover", s.CanTakeover && c.Takeover.Contains(s.Id) },
+                }).ToList() },
+            { "mode", c.Mode },
             { "shown", manager.ShownId },
             { "lit", lit() },
         };

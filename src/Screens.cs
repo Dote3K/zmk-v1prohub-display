@@ -8,7 +8,10 @@ using System.IO;
 interface IScreen
 {
     string Id { get; }       // name in config.json: "keyboard", "claude"
-    string Title { get; }    // name in the tray menu
+    string Title { get; }    // name in the tray menu and the settings window
+
+    // one short line about what it shows right now, for the settings window's sidebar
+    string Summary(double now);
 
     // has something that should take the hub over (when the config allows it) and keep the panel lit
     bool Urgent(double now);
@@ -44,6 +47,15 @@ sealed class ClaudeScreen : IScreen
     }
 
     public bool CanTakeover { get { return true; } }
+
+    public string Summary(double now)
+    {
+        ClaudeView v = sessions.Current(now);
+        if (v == null)
+            return "Idle";
+        string state = v.State.Substring(0, 1) + v.State.Substring(1).ToLowerInvariant();
+        return v.Detail.Length > 0 ? state + " · " + v.Detail : state;
+    }
 
     public IList<Field> Fields()
     {
