@@ -16,6 +16,7 @@ sealed class Config
     public int RotateSeconds = 15;
     public string[] Takeover = { "claude" };             // may take the hub over while they have something urgent
     public bool LayerOverlay = true;                     // a layer or modifier change shows the keyboard for a moment
+    public int Brightness = -1;                          // backlight in %, -1 = the level set in the 佳点 app
     // each screen's own settings, by screen id (see Settings.Option)
     public Dictionary<string, Dictionary<string, object>> Options = new Dictionary<string, Dictionary<string, object>>();
 
@@ -41,6 +42,7 @@ sealed class Config
             { "rotateSeconds", RotateSeconds },
             { "takeover", Takeover },
             { "layerOverlay", LayerOverlay },
+            { "brightness", Brightness },
             { "options", Options.ToDictionary(kv => kv.Key, kv => (object)kv.Value) },
         }) + "\n";
     }
@@ -73,6 +75,8 @@ sealed class Config
                 c.Takeover = ((IList)o).OfType<string>().ToArray();
             if (d.TryGetValue("layerOverlay", out o) && o is bool)
                 c.LayerOverlay = (bool)o;
+            if (d.TryGetValue("brightness", out o) && o is int)
+                c.Brightness = (int)o < 0 ? -1 : Math.Max(5, Math.Min(100, (int)o));
             if (d.TryGetValue("options", out o) && o is Dictionary<string, object>)
                 foreach (KeyValuePair<string, object> kv in (Dictionary<string, object>)o)
                     if (kv.Value is Dictionary<string, object>)

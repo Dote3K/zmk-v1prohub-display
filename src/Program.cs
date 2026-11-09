@@ -254,17 +254,38 @@ static class Program
         }
     }
 
+    static int hubLevel = -1;  // the level set in the 佳点 app, read before this app sends its own
+    static int sentLevel = -1; // the level last sent while lit
+
     // Brightness 0 only sets the hub's screen-off flag and keeps the configured level, so turning the
-    // screen back on reads that level (set in the 佳点 app) and sends it again.
+    // screen back on sends a level again: the custom one from the settings, or the one the 佳点 app set.
+    // A new custom level is sent with the next frame.
     static void SyncBacklight()
     {
-        if (backlightOff == !screenOn)
+        if (!screenOn)
+        {
+            if (!backlightOff && hub.SetBrightness(0))
+            {
+                backlightOff = true;
+                sentLevel = -1;
+            }
             return;
-        int level = screenOn ? hub.Brightness() : 0;
-        if (screenOn && level <= 0)
-            level = 255;
+        }
+        if (hubLevel < 0)
+        {
+            hubLevel = hub.Brightness();
+            if (hubLevel <= 0)
+                hubLevel = 255;
+        }
+        int custom = manager != null ? manager.Config.Brightness : -1;
+        int level = custom >= 0 ? Math.Max(1, custom * 255 / 100) : hubLevel;
+        if (!backlightOff && level == sentLevel)
+            return;
         if (hub.SetBrightness(level))
-            backlightOff = !screenOn;
+        {
+            backlightOff = false;
+            sentLevel = level;
+        }
     }
 
     // Sends a new frame, or re-sends the last one when frame is null. The hub stays open through an

@@ -167,11 +167,22 @@ static class Settings
             Field.Choice("mode", "When nothing needs the hub", "Pin one screen, or take turns. Pick the screens on their own pages.",
                 new[] { new KeyValuePair<string, string>("pinned", "Pin one"), new KeyValuePair<string, string>("rotate", "Rotate") },
                 () => Current.Mode, v => Edit(x => x.Mode = v == "rotate" ? "rotate" : "pinned")),
-            every);
+            every,
+            Field.Toggle("customBrightness", "Custom brightness", "Off: the level set in the 佳点 app.",
+                () => Current.Brightness >= 0, v => Edit(x => x.Brightness = v ? 70 : -1)),
+            Bright());
         p.Add("Interruptions",
             Field.Toggle("layerOverlay", "Show the keyboard on layer change", "A layer change or a held modifier brings the keyboard screen up for 2 seconds.",
                 () => Current.LayerOverlay, v => Edit(x => x.LayerOverlay = v)));
         return p;
+    }
+
+    static Field Bright()
+    {
+        Field f = Field.Number("brightness", "Brightness", "", 5, 100, 5, "%", () => Current.Brightness,
+            v => Edit(x => x.Brightness = (int)Math.Round(v)));
+        f.Visible = () => Current.Brightness >= 0;
+        return f;
     }
 
     static string TitleOf(string id)
