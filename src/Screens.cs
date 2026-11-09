@@ -62,6 +62,7 @@ sealed class ClaudeScreen : IScreen
                     ClaudeHooks.Apply(!hooks, out message);
                     return message;
                 }),
+            Field.Info("quota", "Quota", sessions.QuotaInfo),
             Field.Info("pets", "Pets folder", () => pets + (Directory.Exists(pets) ? "  ·  " + Directory.GetFiles(pets, "*.json").Length + " pets" : "  ·  none yet")),
             Field.Button("openPets", "Open pets folder", "Pets are made with tools/clawd-frames.", () =>
             {

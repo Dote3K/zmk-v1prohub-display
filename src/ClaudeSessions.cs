@@ -28,6 +28,23 @@ sealed class ClaudeSessions
     readonly object sync = new object();
     readonly Dictionary<string, Session> sessions = new Dictionary<string, Session>();
     double quota5h = -1, quota7d = -1, reset5h, reset7d;
+    DateTime statusAt = DateTime.MinValue; // last status line call, for the settings window
+    bool statusHadLimits;
+
+    // Where the quota bars get their numbers from, in a sentence for the settings window.
+    public string QuotaInfo()
+    {
+        lock (sync)
+        {
+            if (statusAt == DateTime.MinValue)
+                return "No data yet. The quota comes from Claude Code's status line, which has not run since the app started.";
+            string ago = Ago((DateTime.UtcNow - statusAt).TotalMilliseconds) + " ago";
+            if (!statusHadLimits && quota5h < 0 && quota7d < 0)
+                return "Status line seen " + ago + ", but without rate limits (Pro, Max or Ultra plans only, after the first reply).";
+            return "5h " + (quota5h >= 0 ? Math.Round(quota5h) + "%" : "--") + " · 7d " + (quota7d >= 0 ? Math.Round(quota7d) + "%" : "--") +
+                " · status line " + ago;
+        }
+    }
 
     public void Hook(Dictionary<string, object> e, double now)
     {
@@ -203,6 +220,8 @@ sealed class ClaudeSessions
         double used5h = Num(e, "rate_limits", "five_hour", "used_percentage"), used7d = Num(e, "rate_limits", "seven_day", "used_percentage");
         lock (sync)
         {
+            statusAt = DateTime.UtcNow;
+            statusHadLimits = e.ContainsKey("rate_limits");
             if (!double.IsNaN(used5h))
             {
                 quota5h = used5h;
