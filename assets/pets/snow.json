@@ -1,0 +1,13 @@
+{
+  "name": "snow",
+  "source": "clawd-pet@b208f0c/clawd-snow.svg",
+  "frameWidth": 141,
+  "frameHeight": 123,
+  "columns": 10,
+  "frames": 90,
+  "frameMs": 66.67,
+  "loopMs": 6000,
+  "seamless": true,
+  "scale": 3,
+  "removedBackgrounds": 0
+}

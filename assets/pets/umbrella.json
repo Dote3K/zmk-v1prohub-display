@@ -1,0 +1,13 @@
+{
+  "name": "umbrella",
+  "source": "clawd-pet@b208f0c/clawd-umbrella.svg",
+  "frameWidth": 93,
+  "frameHeight": 123,
+  "columns": 10,
+  "frames": 60,
+  "frameMs": 66.67,
+  "loopMs": 4000,
+  "seamless": false,
+  "scale": 3,
+  "removedBackgrounds": 0
+}

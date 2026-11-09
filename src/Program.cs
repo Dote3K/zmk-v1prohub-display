@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using Microsoft.Win32;
@@ -61,6 +62,26 @@ static class Program
             return PlayClaude(ClaudeView.Demo(), args.Length == 2 ? double.Parse(args[1]) : 6);
 
         // shows the status screen, fades it out and switches the backlight off, then wakes it again
+        // --clock-png <style> <out.png> [yyyy-MM-ddTHH:mm] [weather code] [temperature]: one clock frame with
+        // a made-up time and weather, to see a style without waiting for the evening or the rain
+        if (args.Length >= 3 && args.Length <= 6 && args[0] == "--clock-png")
+        {
+            DateTime at = args.Length >= 4 ? DateTime.Parse(args[3], CultureInfo.InvariantCulture) : DateTime.Now;
+            WeatherNow w = args.Length >= 5 ? new WeatherNow
+            {
+                Code = int.Parse(args[4]),
+                Temp = args.Length >= 6 ? double.Parse(args[5], CultureInfo.InvariantCulture) : 27,
+                High = 31, Low = 24, RainChance = 40, At = DateTime.Now,
+                IsDay = at.Hour >= 6 && at.Hour < 18,
+            } : null;
+            ClockScreen clock = new ClockScreen(canvas, Sprite.DefaultDir(), new ClaudeSessions(),
+                () => new Status { LayerName = "Base", BatteryLeft = 87, BatteryRight = 42 });
+            double next;
+            clock.Draw(args[1], at, w, 1500, 1, out next);
+            canvas.SavePng(args[2]);
+            return 0;
+        }
+
         if (args.Length == 1 && args[0] == "--screen-test")
         {
             manager = new ScreenManager(new KeyboardScreen(renderer), new IScreen[0], new Config(), Push, SetScreen);
@@ -93,9 +114,15 @@ static class Program
 
         // every kind of screen the hub can show; they all draw on the one canvas, from the manager's thread
         ClaudeSessions sessions = new ClaudeSessions();
-        IScreen[] screens = { new ClaudeScreen(new ClaudeRenderer(canvas, Sprite.DefaultDir()), sessions) };
-        manager = new ScreenManager(new KeyboardScreen(renderer), screens, Config.Load(), Push, SetScreen);
+        KeyboardScreen keyboardScreen = new KeyboardScreen(renderer);
+        IScreen[] screens =
+        {
+            new ClaudeScreen(new ClaudeRenderer(canvas, Sprite.DefaultDir()), sessions),
+            new ClockScreen(canvas, Sprite.DefaultDir(), sessions, () => keyboardScreen.Latest),
+        };
+        manager = new ScreenManager(keyboardScreen, screens, Config.Load(), Push, SetScreen);
         Settings.Init(manager);
+        Weather.Start(manager.Wake);
         IDisposable watch = Config.Watch(c =>
         {
             if (c.ToJson() != manager.Config.ToJson()) // our own saves come back here too

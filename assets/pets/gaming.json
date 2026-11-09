@@ -1,0 +1,13 @@
+{
+  "name": "gaming",
+  "source": "clawd-pet@b208f0c/clawd-gaming.svg",
+  "frameWidth": 133,
+  "frameHeight": 91,
+  "columns": 10,
+  "frames": 60,
+  "frameMs": 66.67,
+  "loopMs": 4000,
+  "seamless": false,
+  "scale": 7,
+  "removedBackgrounds": 0
+}

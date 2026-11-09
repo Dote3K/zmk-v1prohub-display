@@ -13,6 +13,7 @@ sealed class Sprite : IDisposable
     public readonly string Name;
     public readonly int Width, Height, Frames;
     public readonly double FrameMs;
+    public double ArtScale;         // screen pixels per art pixel it was rendered at, 0 if unknown
     readonly int columns;
     readonly Bitmap sheet;
 
@@ -62,7 +63,11 @@ sealed class Sprite : IDisposable
                 using (Graphics g = Graphics.FromImage(sheet))
                     g.DrawImage(raw, new Rectangle(0, 0, raw.Width, raw.Height));
             }
-            return new Sprite(name, sheet, w, h, frames, columns, frameMs);
+            Match scale = Regex.Match(m, "\"scale\"\\s*:\\s*([0-9.]+)");
+            return new Sprite(name, sheet, w, h, frames, columns, frameMs)
+            {
+                ArtScale = scale.Success ? double.Parse(scale.Groups[1].Value, CultureInfo.InvariantCulture) : 0,
+            };
         }
         // (csc of .NET Framework 4 is C# 5: no exception filters)
         catch (IOException) { return null; }
@@ -96,11 +101,17 @@ sealed class Sprite : IDisposable
     // unscaled, so every art pixel stays a crisp square
     public void Draw(Graphics g, int frame, int x, int y)
     {
+        Draw(g, frame, x, y, 1);
+    }
+
+    // scaled with nearest neighbour; a scale that divides the pet's own (e.g. 1/2 of 6x) stays crisp
+    public void Draw(Graphics g, int frame, int x, int y, float scale)
+    {
         InterpolationMode mode = g.InterpolationMode;
         PixelOffsetMode offset = g.PixelOffsetMode;
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
         g.PixelOffsetMode = PixelOffsetMode.Half;
-        g.DrawImage(sheet, new Rectangle(x, y, Width, Height),
+        g.DrawImage(sheet, new Rectangle(x, y, (int)Math.Round(Width * scale), (int)Math.Round(Height * scale)),
             frame % columns * Width, frame / columns * Height, Width, Height, GraphicsUnit.Pixel);
         g.InterpolationMode = mode;
         g.PixelOffsetMode = offset;

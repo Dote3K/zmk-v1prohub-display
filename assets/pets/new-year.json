@@ -1,0 +1,13 @@
+{
+  "name": "new-year",
+  "source": "clawd-pet@b208f0c/clawd-new-year.svg",
+  "frameWidth": 84,
+  "frameHeight": 112,
+  "columns": 10,
+  "frames": 38,
+  "frameMs": 65.79,
+  "loopMs": 2500,
+  "seamless": true,
+  "scale": 2,
+  "removedBackgrounds": 0
+}

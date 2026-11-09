@@ -143,7 +143,7 @@ async function renderOne(browser, name, svg, { scale: fixedScale, max, fps, maxL
   const measure = 10; // px per unit while measuring
   const page = await browser.newPage({ viewport: { width: Math.ceil(vw * measure), height: Math.ceil(vh * measure) } });
   try {
-    const style = `<style>html,body{margin:0;background:#000}.cell{overflow:hidden}
+    const style = `<style>html,body{margin:0;background:transparent}.cell{overflow:hidden}
       .cell>svg{display:block}${crisp ? "svg *{shape-rendering:crispEdges}" : ""}</style>`;
 
     // 1) one copy to learn the timing of every animation and drop full-frame backgrounds (a flash that
@@ -227,7 +227,7 @@ async function renderOne(browser, name, svg, { scale: fixedScale, max, fps, maxL
       });
     }, { base, frameMs });
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-    const png = await page.screenshot({ clip: { x: 0, y: 0, width: columns * w, height: rows * h } });
+    const png = await page.screenshot({ clip: { x: 0, y: 0, width: columns * w, height: rows * h }, omitBackground: true }); // transparent: pets also stand on a coloured sky
 
     const manifest = {
       name, source: `clawd-pet@${commit.slice(0, 7)}/clawd-${name}.svg`,

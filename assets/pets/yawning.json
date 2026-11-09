@@ -1,0 +1,13 @@
+{
+  "name": "yawning",
+  "source": "clawd-pet@b208f0c/clawd-yawning.svg",
+  "frameWidth": 120,
+  "frameHeight": 140,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": false,
+  "scale": 5,
+  "removedBackgrounds": 0
+}

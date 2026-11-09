@@ -353,6 +353,16 @@ sealed class ClaudeSessions
         }
     }
 
+    // % used of the 5-hour and 7-day windows, -1 when unknown (for other screens)
+    public void Quota(out int fiveHour, out int sevenDay)
+    {
+        ClaudeView v = new ClaudeView();
+        lock (sync)
+            Quotas(v);
+        fiveHour = v.Quota5h;
+        sevenDay = v.Quota7d;
+    }
+
     // a window whose reset time has passed no longer says anything
     void Quotas(ClaudeView v)
     {

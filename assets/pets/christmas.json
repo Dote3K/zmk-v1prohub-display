@@ -1,0 +1,13 @@
+{
+  "name": "christmas",
+  "source": "clawd-pet@b208f0c/clawd-christmas.svg",
+  "frameWidth": 72,
+  "frameHeight": 135,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": false,
+  "scale": 3,
+  "removedBackgrounds": 0
+}

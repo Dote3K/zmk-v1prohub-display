@@ -52,6 +52,16 @@ sealed class KeyboardScreen : IScreen
 
     bool reported; // the dongle has sent a status since the app started
 
+    // the dongle's latest status, null until it has sent one
+    public Status Latest
+    {
+        get
+        {
+            lock (sync)
+                return reported ? target : null;
+        }
+    }
+
     public string Summary(double now)
     {
         Status s;

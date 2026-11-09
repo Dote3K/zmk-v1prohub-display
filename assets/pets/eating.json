@@ -1,0 +1,13 @@
+{
+  "name": "eating",
+  "source": "clawd-pet@b208f0c/clawd-eating.svg",
+  "frameWidth": 133,
+  "frameHeight": 91,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": true,
+  "scale": 7,
+  "removedBackgrounds": 0
+}

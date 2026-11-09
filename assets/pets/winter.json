@@ -1,0 +1,13 @@
+{
+  "name": "winter",
+  "source": "clawd-pet@b208f0c/clawd-winter.svg",
+  "frameWidth": 102,
+  "frameHeight": 123,
+  "columns": 10,
+  "frames": 90,
+  "frameMs": 66.67,
+  "loopMs": 6000,
+  "seamless": true,
+  "scale": 3,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "coffee",
+  "source": "clawd-pet@b208f0c/clawd-coffee.svg",
+  "frameWidth": 140,
+  "frameHeight": 133,
+  "columns": 10,
+  "frames": 60,
+  "frameMs": 66.67,
+  "loopMs": 4000,
+  "seamless": false,
+  "scale": 7,
+  "removedBackgrounds": 0
+}
