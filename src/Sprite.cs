@@ -28,12 +28,16 @@ sealed class Sprite : IDisposable
         FrameMs = frameMs;
     }
 
-    // Where pets are looked up: %APPDATA%\zmk-hub-display\pets, or assets\pets next to bin\ while developing.
+    // Where pets are looked up: %APPDATA%\zmk-hub-display\pets (your own), pets\ next to the exe (the
+    // release zip), or assets\pets next to bin\ while developing.
     public static string DefaultDir()
     {
         string user = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "zmk-hub-display", "pets");
         if (Directory.Exists(user))
             return user;
+        string beside = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pets"); // the release zip
+        if (Directory.Exists(beside))
+            return beside;
         string dev = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "assets", "pets"));
         return Directory.Exists(dev) ? dev : user;
     }
