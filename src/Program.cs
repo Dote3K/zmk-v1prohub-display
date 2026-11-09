@@ -14,6 +14,8 @@ static class Program
     static Canvas canvas;
     static Renderer renderer;
     static Animator animator;
+    static Display display;
+    static Status lastStatus; // the dongle's latest report, null until it has sent one
     static readonly byte[] lastFrame = new byte[Hub.FrameBytes]; // own copy: the renderer reuses its buffer
     static bool haveFrame;
 
@@ -73,7 +75,22 @@ static class Program
         int refresh = args.Length == 2 && args[0] == "--refresh" ? int.Parse(args[1]) : 0;
         Timer timer = refresh > 0 ? new Timer(_ => Push(null), null, refresh * 1000, refresh * 1000) : null;
 
-        animator = new Animator(renderer, Push, SetScreen);
+        // Claude screen: its own canvas, since it renders on its own thread next to the animator
+        ClaudeSessions sessions = new ClaudeSessions();
+        display = new Display(new ClaudeScreen(new Canvas(), Sprite.DefaultDir()), sessions, Push, SetClaudeScreen,
+            () => animator.Show(lastStatus ?? new Status { Active = false }));
+        animator = new Animator(renderer, display.KeyboardFrame, SetScreen);
+        new ClaudeServer((path, body) =>
+        {
+            string reply = null;
+            if (path == "/hook")
+                sessions.Hook(body, display.Now);
+            else
+                reply = sessions.StatusLine(body);
+            display.ClaudeChanged();
+            return reply;
+        }).Start();
+
         Run();
         GC.KeepAlive(timer);
         GC.KeepAlive(single);
@@ -159,7 +176,11 @@ static class Program
                 {
                     Status s = Status.Parse(dongle.Read());
                     if (s != null)
+                    {
+                        display.KeyboardStatus(s);
+                        lastStatus = s;
                         animator.Show(s);
+                    }
                 }
             }
             catch (IOException) { }
@@ -175,17 +196,37 @@ static class Program
     // state starts unknown (treated as off), so the first push turns it on even if a previous run left it off.
     static bool screenOn = true, backlightOff = true;
 
+    // The keyboard and Claude each say whether they want the panel lit; it is lit while either does.
+    static bool keyboardWantsOn = true, claudeWantsOn;
+
     // Called by the animator: off once the idle fade-out has finished, on as soon as a fade-in starts.
     static void SetScreen(bool on)
     {
         lock (hubLock)
         {
-            if (screenOn == on)
-                return;
-            screenOn = on;
-            if (!on)
-                Push(null);
+            keyboardWantsOn = on;
+            ApplyScreen();
         }
+    }
+
+    // Called by the display: on while the Claude screen is up.
+    static void SetClaudeScreen(bool on)
+    {
+        lock (hubLock)
+        {
+            claudeWantsOn = on;
+            ApplyScreen();
+        }
+    }
+
+    static void ApplyScreen()
+    {
+        bool on = keyboardWantsOn || claudeWantsOn;
+        if (screenOn == on)
+            return;
+        screenOn = on;
+        if (!on)
+            Push(null);
     }
 
     // Brightness 0 only sets the hub's screen-off flag and keeps the configured level, so turning the
