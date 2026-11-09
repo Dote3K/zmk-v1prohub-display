@@ -21,6 +21,16 @@ static class Program
 
     static int Main(string[] args)
     {
+        // Claude Code integration; first, since --hook and --statusline run on every event and should be quick
+        if (args.Length == 1 && args[0] == "--hook")
+            return ClaudeHooks.Forward("/hook", false);
+        if (args.Length == 1 && args[0] == "--statusline")
+            return ClaudeHooks.Forward("/statusline", true);
+        if (args.Length == 1 && args[0] == "--install-claude")
+            return ClaudeHooks.Install(true);
+        if (args.Length == 1 && args[0] == "--uninstall-claude")
+            return ClaudeHooks.Install(false);
+
         canvas = new Canvas();
         renderer = new Renderer(canvas, "Cygnus");
 
