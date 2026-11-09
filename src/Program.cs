@@ -11,6 +11,7 @@ static class Program
     const ushort DongleVid = 0x1D50, DonglePid = 0x615E;
 
     static readonly object hubLock = new object();
+    static Canvas canvas;
     static Renderer renderer;
     static Animator animator;
     static readonly byte[] lastFrame = new byte[Hub.FrameBytes]; // own copy: the renderer reuses its buffer
@@ -18,14 +19,33 @@ static class Program
 
     static int Main(string[] args)
     {
-        renderer = new Renderer("Cygnus");
+        canvas = new Canvas();
+        renderer = new Renderer(canvas, "Cygnus");
 
         if (args.Length == 2 && args[0] == "--png")
         {
             renderer.Render(new Status { Layer = 1, LayerName = "Nav/Num", Mods = 0x0F, BatteryLeft = 87 });
-            renderer.SavePng(args[1]);
+            canvas.SavePng(args[1]);
             return 0;
         }
+
+        // Claude screen tryouts. --pet-png <state|pet> <out.png> [ms]: one frame to a file, exit code 2 if
+        // the pet is missing. --pet <state|pet> [seconds]: plays it on the hub. --pet-demo [seconds]: every
+        // demo state in turn. A name is a demo state (e.g. "working") or any pet in the pets folder.
+        if ((args.Length == 3 || args.Length == 4) && args[0] == "--pet-png")
+        {
+            using (ClaudeScreen screen = new ClaudeScreen(canvas, Sprite.DefaultDir()))
+            {
+                ClaudeView v = DemoView(args[1]);
+                screen.Render(v, args.Length == 4 ? double.Parse(args[3]) : 0);
+                canvas.SavePng(args[2]);
+                return screen.Pet(v.Pet) != null ? 0 : 2;
+            }
+        }
+        if ((args.Length == 2 || args.Length == 3) && args[0] == "--pet")
+            return PlayClaude(new[] { DemoView(args[1]) }, args.Length == 3 ? double.Parse(args[2]) : 10);
+        if ((args.Length == 1 || args.Length == 2) && args[0] == "--pet-demo")
+            return PlayClaude(ClaudeView.Demo(), args.Length == 2 ? double.Parse(args[1]) : 6);
 
         // shows the status screen, fades it out and switches the backlight off, then wakes it again
         if (args.Length == 1 && args[0] == "--screen-test")
@@ -57,6 +77,39 @@ static class Program
         Run();
         GC.KeepAlive(timer);
         GC.KeepAlive(single);
+        return 0;
+    }
+
+    // A demo state by its word ("working", "needs you") or pet ("detective"); otherwise the named pet
+    // with its name as the state.
+    static ClaudeView DemoView(string name)
+    {
+        foreach (ClaudeView v in ClaudeView.Demo())
+            if (string.Equals(v.State, name.Replace('-', ' '), StringComparison.OrdinalIgnoreCase) || v.Pet == name)
+                return v;
+        return new ClaudeView { Pet = name, State = name.Replace("working-", "").Replace('-', ' '), Quota5h = 23, Quota7d = 41 };
+    }
+
+    // Plays each view for the given seconds, a frame whenever the pet's animation moves on.
+    static int PlayClaude(ClaudeView[] views, double seconds)
+    {
+        using (ClaudeScreen screen = new ClaudeScreen(canvas, Sprite.DefaultDir()))
+        {
+            Stopwatch clock = Stopwatch.StartNew();
+            foreach (ClaudeView v in views)
+            {
+                Sprite pet = screen.Pet(v.Pet);
+                double start = clock.Elapsed.TotalMilliseconds;
+                double ms;
+                while ((ms = clock.Elapsed.TotalMilliseconds - start) < seconds * 1000)
+                {
+                    Push(screen.Render(v, ms));
+                    double wait = pet != null ? pet.UntilNextFrame(clock.Elapsed.TotalMilliseconds - start) : 250;
+                    Thread.Sleep((int)Math.Ceiling(Math.Max(1, wait)));
+                }
+            }
+        }
+        CloseHub(null);
         return 0;
     }
 
