@@ -34,8 +34,21 @@ sealed class KeyboardScreen : IScreen
     public string Id { get { return "keyboard"; } }
     public string Title { get { return "Keyboard"; } }
 
+    // Whether the keyboard has two halves, so two batteries. "auto" takes it as split once a second
+    // battery has been seen, and remembers that, so a right half that drops out keeps its bar.
+    public static bool IsSplit
+    {
+        get
+        {
+            string halves = Settings.Option("keyboard", "halves", "auto");
+            return halves == "two" || (halves == "auto" && Settings.Option("keyboard", "split", false));
+        }
+    }
+
     public void Show(Status s)
     {
+        if (s.BatteryRight > 0 && !Settings.Option(Id, "split", false))
+            Settings.SetOption(Id, "split", true);
         lock (sync)
         {
             target = s;
@@ -70,7 +83,7 @@ sealed class KeyboardScreen : IScreen
         if (!reported)
             return "Waiting for the dongle";
         Func<int, string> pct = b => b > 0 ? b + "%" : "--";
-        return View.LayerLabel(s) + " · " + pct(s.BatteryLeft) + " · " + pct(s.BatteryRight);
+        return View.LayerLabel(s) + " · " + pct(s.BatteryLeft) + (IsSplit ? " · " + pct(s.BatteryRight) : "");
     }
 
     const string DefaultName = "Cygnus";
@@ -79,6 +92,9 @@ sealed class KeyboardScreen : IScreen
     {
         return new List<Field>
         {
+            Field.Choice("halves", "Halves", "How many batteries to show. Auto shows two once the second half has reported a battery level.",
+                new[] { new KeyValuePair<string, string>("auto", "Auto"), new KeyValuePair<string, string>("two", "Two"), new KeyValuePair<string, string>("one", "One") },
+                () => Settings.Option(Id, "halves", "auto"), v => Settings.SetOption(Id, "halves", v)),
             Field.Text("name", "Keyboard name", "Shown in the top left corner of the keyboard screen.",
                 () => Settings.Option(Id, "name", DefaultName), v => Settings.SetOption(Id, "name", v.Trim())),
         };
@@ -168,6 +184,7 @@ sealed class KeyboardScreen : IScreen
         v.MaxLayer = maxLayer;
         v.BatteryLeft = s.BatteryLeft;
         v.BatteryRight = s.BatteryRight;
+        v.Split = IsSplit;
         return moving;
     }
 }

@@ -15,6 +15,7 @@ sealed class View
     public int MaxLayer;                         // highest layer the track has room for
     public float[] Mods = new float[4];          // presence of Ctrl, Shift, Alt, GUI: 0 hidden .. 1 shown
     public int BatteryLeft, BatteryRight;
+    public bool Split = true;                    // two halves, so two batteries; one bar otherwise
     public float Screen = 1;                     // overall brightness: 0 screen off .. 1 fully on
 
     public static string LayerLabel(Status s)

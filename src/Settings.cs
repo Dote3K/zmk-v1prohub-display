@@ -103,6 +103,8 @@ static class Settings
     // Applies an edit to a copy of the config, puts it in effect and saves it.
     public static void Edit(Action<Config> edit)
     {
+        if (manager == null)
+            return; // the one-shot test modes run without a manager and do not save anything
         lock (editLock)
         {
             Config c = manager.Config.Copy();

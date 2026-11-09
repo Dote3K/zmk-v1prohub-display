@@ -320,8 +320,13 @@ sealed class ClockScreen : IScreen
         Status k = keyboard();
         if (k != null && y < H - 28)
         {
-            Bar(x, y, colW / 2 - 6, "L", k.BatteryLeft, false);
-            Bar(x + colW / 2 + 6, y, colW / 2 - 6, "R", k.BatteryRight, false);
+            if (KeyboardScreen.IsSplit)
+            {
+                Bar(x, y, colW / 2 - 6, "L", k.BatteryLeft, false);
+                Bar(x + colW / 2 + 6, y, colW / 2 - 6, "R", k.BatteryRight, false);
+            }
+            else
+                Bar(x, y, colW, "Battery", k.BatteryLeft, false);
         }
     }
 

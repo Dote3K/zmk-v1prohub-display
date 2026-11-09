@@ -70,8 +70,13 @@ sealed class Renderer
             mx += m * ModGap;
         }
 
-        Battery(16, v.BatteryLeft);
-        Battery(W - 16 - BatteryWidth, v.BatteryRight);
+        if (v.Split)
+        {
+            Battery(16, v.BatteryLeft, BatteryWidth);
+            Battery(W - 16 - BatteryWidth, v.BatteryRight, BatteryWidth);
+        }
+        else
+            Battery((W - SingleWidth) / 2, v.BatteryLeft, SingleWidth);
 
         c.Fade(v.Screen);
         return c.ToRgb565();
@@ -127,15 +132,15 @@ sealed class Renderer
         return g.MeasureString(text, big).Width <= W - 16 ? big : medium;
     }
 
-    const int BatteryWidth = 130;
+    const int BatteryWidth = 130, SingleWidth = 180;
 
     // thin bar with the percentage centered above it
-    void Battery(int x, int pct)
+    void Battery(int x, int pct, int width)
     {
         Color col = pct >= 50 ? Color.White : pct >= 20 ? Color.FromArgb(0xFF, 0x8A, 0x1F) : Color.FromArgb(0xF0, 0x44, 0x38);
-        g.DrawString(pct > 0 ? pct.ToString() : "--", small, c.Brush(pct > 0 ? Text : Dim), new RectangleF(x, 132, BatteryWidth, 18), center);
-        c.Fill(Track, x, 154, BatteryWidth, 4, 2);
+        g.DrawString(pct > 0 ? pct.ToString() : "--", small, c.Brush(pct > 0 ? Text : Dim), new RectangleF(x, 132, width, 18), center);
+        c.Fill(Track, x, 154, width, 4, 2);
         if (pct > 0)
-            c.Fill(col, x, 154, Math.Max(4, BatteryWidth * pct / 100), 4, 2);
+            c.Fill(col, x, 154, Math.Max(4, width * pct / 100), 4, 2);
     }
 }
