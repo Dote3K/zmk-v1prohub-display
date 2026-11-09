@@ -66,7 +66,7 @@ static class ClaudeHooks
         {
             using (TcpClient client = new TcpClient())
             {
-                IAsyncResult connect = client.BeginConnect(IPAddress.Loopback, ClaudeServer.Port, null, null);
+                IAsyncResult connect = client.BeginConnect(IPAddress.Loopback, LocalServer.Port, null, null);
                 if (!connect.AsyncWaitHandle.WaitOne(150) || !client.Connected)
                     return null;
                 client.EndConnect(connect);

@@ -17,13 +17,16 @@ sealed class Tray : IDisposable
     readonly NotifyIcon icon;
     readonly ContextMenuStrip menu = new ContextMenuStrip();
 
-    public Tray(ScreenManager manager)
+    readonly Action openSettings;
+
+    public Tray(ScreenManager manager, Action openSettings)
     {
         this.manager = manager;
+        this.openSettings = openSettings;
         menu.Items.Add("..."); // an empty strip refuses to open; the real items are built on opening
         menu.Opening += (s, e) => Build();
         icon = new NotifyIcon { Icon = MakeIcon(), Text = "ZMK hub display", ContextMenuStrip = menu, Visible = true };
-        icon.DoubleClick += (s, e) => OpenConfig();
+        icon.DoubleClick += (s, e) => openSettings();
     }
 
     // rebuilt on every opening, so it always matches the config (also after a hand edit)
@@ -33,6 +36,10 @@ sealed class Tray : IDisposable
         IList<IScreen> screens = manager.Screens;
         menu.Items.Clear();
 
+        ToolStripMenuItem settings = Item("Settings…", false, openSettings);
+        settings.Font = new Font(settings.Font, FontStyle.Bold); // the double-click action
+        menu.Items.Add(settings);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Hub screen") { Enabled = false });
         foreach (IScreen s in screens)
         {

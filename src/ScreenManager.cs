@@ -26,12 +26,15 @@ sealed class ScreenManager
     bool keyboardActive;                  // dongle says the keyboard is in use
     double overlayUntil = double.NegativeInfinity, rotateAt;
     int rotateIndex;
+    string previewId;                     // "Preview" from the settings window
+    double previewUntil = double.NegativeInfinity;
+    volatile string shownId = "";
 
     // drawing state, touched only by the loop thread
     readonly Tween light = new Tween(0, OnMs);
     IScreen shown, leaving;
     double switchAt = double.NegativeInfinity;
-    bool powered;
+    volatile bool powered;
 
     public ScreenManager(KeyboardScreen keyboard, IEnumerable<IScreen> others, Config config, Action<byte[]> push, Action<bool> power)
     {
@@ -70,6 +73,29 @@ sealed class ScreenManager
             config = c;
             rotateIndex = 0;
             rotateAt = Now + c.RotateSeconds * 1000.0;
+        }
+        wake.Set();
+    }
+
+    // whether the panel is lit or lighting up
+    public bool Lit
+    {
+        get { return powered; }
+    }
+
+    // id of the screen on the hub right now
+    public string ShownId
+    {
+        get { return shownId; }
+    }
+
+    // Puts a screen on the hub for a while, lit, whatever the mode says.
+    public void Preview(string id, double ms)
+    {
+        lock (sync)
+        {
+            previewId = id;
+            previewUntil = Now + ms;
         }
         wake.Set();
     }
@@ -116,6 +142,11 @@ sealed class ScreenManager
     {
         Config c = config;
         urgent = false;
+        if (now < previewUntil && Find(previewId) != null)
+        {
+            urgent = true; // lit, so the preview is seen even with the keyboard idle
+            return Find(previewId);
+        }
         if (c.LayerOverlay && now < overlayUntil)
             return keyboard;
         foreach (string id in c.Takeover)
@@ -185,6 +216,7 @@ sealed class ScreenManager
                     switchAt = now;
                 }
                 shown = pick;
+                shownId = pick.Id;
             }
 
             double wait = RecheckMs; // urgency changes with time (e.g. DONE expiring)
@@ -223,6 +255,8 @@ sealed class ScreenManager
             }
             if (now < overlayEnd)
                 wait = Math.Min(wait, overlayEnd - now);
+            if (now < previewUntil)
+                wait = Math.Min(wait, previewUntil - now);
             if (rotating)
                 wait = Math.Min(wait, rotateEnd - now);
 

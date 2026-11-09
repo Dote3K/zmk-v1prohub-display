@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -14,6 +15,7 @@ static class Program
     static Canvas canvas;
     static Renderer renderer;
     static ScreenManager manager;
+    static WebUi ui;
     static readonly byte[] lastFrame = new byte[Hub.FrameBytes]; // own copy: the renderer reuses its buffer
     static bool haveFrame;
 
@@ -79,7 +81,12 @@ static class Program
         bool first;
         Mutex single = new Mutex(true, "zmk-hub-display", out first);
         if (!first)
+        {
+            // launched again while running (or --settings): open the running copy's settings window
+            if (args.Length == 0 || (args.Length == 1 && args[0] == "--settings"))
+                WebUi.OpenRunning();
             return 0;
+        }
 
         int refresh = args.Length == 2 && args[0] == "--refresh" ? int.Parse(args[1]) : 0;
         Timer timer = refresh > 0 ? new Timer(_ => Push(null), null, refresh * 1000, refresh * 1000) : null;
@@ -94,27 +101,52 @@ static class Program
             if (c.ToJson() != manager.Config.ToJson()) // our own saves come back here too
                 manager.Configure(c);
         });
-        new ClaudeServer((path, body) =>
-        {
-            string reply = null;
-            if (path == "/hook")
-                sessions.Hook(body, manager.Now);
-            else
-                reply = sessions.StatusLine(body);
-            manager.Wake();
-            return reply;
-        }).Start();
+        ui = new WebUi(manager, Snapshot, () => manager.Lit);
+        if (new LocalServer(r => ui.Handle(r) ?? Claude(r, sessions)).Start())
+            ui.Publish();
+        if (args.Length == 1 && args[0] == "--settings")
+            ui.Open();
 
         // the dongle is read on its own thread; this one runs the tray icon until "Quit" is picked
         Thread keyboard = new Thread(Run);
         keyboard.IsBackground = true;
         keyboard.Start();
-        using (new Tray(manager))
+        using (new Tray(manager, ui.Open))
             System.Windows.Forms.Application.Run();
         GC.KeepAlive(timer);
         GC.KeepAlive(watch);
         GC.KeepAlive(single);
         return 0;
+    }
+
+    // Claude Code's hooks POST their event to /hook and the status line its JSON to /statusline. Only
+    // JSON POSTs without an Origin are taken: a web page cannot send those to localhost without a CORS
+    // preflight, which is refused. Hooks get an empty 200, which Claude Code reads as "no output", so
+    // nothing here can approve, deny or block anything.
+    static Response Claude(Request r, ClaudeSessions sessions)
+    {
+        if (r.Path != "/hook" && r.Path != "/statusline")
+            return null;
+        if (r.Method != "POST" || r.Header("Origin") != null ||
+            !(r.Header("Content-Type") ?? "").StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+            return Response.Error("403 Forbidden");
+        Dictionary<string, object> body = r.Json();
+        if (body == null)
+            return Response.Error("400 Bad Request");
+        string reply = null;
+        if (r.Path == "/hook")
+            sessions.Hook(body, manager.Now);
+        else
+            reply = sessions.StatusLine(body);
+        manager.Wake();
+        return Response.Text(reply);
+    }
+
+    // a copy of the frame last sent to the hub, null before the first one
+    static byte[] Snapshot()
+    {
+        lock (hubLock)
+            return haveFrame ? (byte[])lastFrame.Clone() : null;
     }
 
     // A demo state by its word ("working", "needs you") or pet ("detective"); otherwise the named pet
