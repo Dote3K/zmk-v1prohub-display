@@ -1,0 +1,13 @@
+{
+  "name": "clawd-frames",
+  "private": true,
+  "type": "module",
+  "description": "Renders clawd-pet animated SVGs into sprite sheets for the hub screen",
+  "scripts": {
+    "fetch": "node render.mjs fetch",
+    "render": "node render.mjs render"
+  },
+  "dependencies": {
+    "playwright-core": "1.65.0"
+  }
+}
