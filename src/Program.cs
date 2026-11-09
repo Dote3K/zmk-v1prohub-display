@@ -86,7 +86,12 @@ static class Program
         // every kind of screen the hub can show; they all draw on the one canvas, from the manager's thread
         ClaudeSessions sessions = new ClaudeSessions();
         IScreen[] screens = { new ClaudeScreen(new ClaudeRenderer(canvas, Sprite.DefaultDir()), sessions) };
-        manager = new ScreenManager(new KeyboardScreen(renderer), screens, new Config(), Push, SetScreen);
+        manager = new ScreenManager(new KeyboardScreen(renderer), screens, Config.Load(), Push, SetScreen);
+        IDisposable watch = Config.Watch(c =>
+        {
+            if (c.ToJson() != manager.Config.ToJson()) // our own saves come back here too
+                manager.Configure(c);
+        });
         new ClaudeServer((path, body) =>
         {
             string reply = null;
@@ -100,6 +105,7 @@ static class Program
 
         Run();
         GC.KeepAlive(timer);
+        GC.KeepAlive(watch);
         GC.KeepAlive(single);
         return 0;
     }

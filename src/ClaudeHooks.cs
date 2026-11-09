@@ -1,14 +1,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Web.Script.Serialization;
 
 // The Claude Code side: the exe runs as the hook and status line command (--hook, --statusline), and
 // can add itself to Claude Code's settings.json or take itself out again (--install-claude,
@@ -45,7 +43,7 @@ static class ClaudeHooks
         {
             if (reply == null)
             {
-                Dictionary<string, object> e = Parse(Encoding.UTF8.GetString(body));
+                Dictionary<string, object> e = Json.Parse(Encoding.UTF8.GetString(body));
                 if (e != null)
                     reply = new ClaudeSessions().StatusLine(e);
             }
@@ -112,7 +110,7 @@ static class ClaudeHooks
             string text = File.ReadAllText(file, Encoding.UTF8);
             if (text.Trim().Length > 0)
             {
-                settings = Parse(text);
+                settings = Json.Parse(text);
                 if (settings == null)
                 {
                     Print(file + " is not valid JSON; nothing changed.");
@@ -128,13 +126,19 @@ static class ClaudeHooks
             Print("\"hooks\" in " + file + " is not an object; nothing changed.");
             return 1;
         }
-        if (hooks == null)
-            hooks = new Dictionary<string, object>();
-        foreach (string ev in hooks.Keys.ToList())
+        // rebuilt rather than edited in place: a Dictionary reorders its keys after removals, and the
+        // file should keep its order from one install to the next
+        Dictionary<string, object> old = hooks ?? new Dictionary<string, object>();
+        hooks = new Dictionary<string, object>();
+        foreach (KeyValuePair<string, object> kv in old)
         {
-            List<object> groups = List(hooks[ev]);
+            string ev = kv.Key;
+            List<object> groups = List(kv.Value);
             if (groups == null)
+            {
+                hooks[ev] = kv.Value; // not ours to judge
                 continue;
+            }
             foreach (object g in groups.ToList())
             {
                 Dictionary<string, object> group = g as Dictionary<string, object>;
@@ -146,9 +150,7 @@ static class ClaudeHooks
                 if (handlers.Count == 0)
                     groups.Remove(g);
             }
-            if (groups.Count == 0)
-                hooks.Remove(ev);
-            else
+            if (groups.Count > 0)
                 hooks[ev] = groups;
         }
         if (install)
@@ -191,7 +193,7 @@ static class ClaudeHooks
 
         Directory.CreateDirectory(dir);
         string tmp = file + ".tmp", backup = file + ".zmk-hub-display.bak";
-        File.WriteAllText(tmp, Json(settings, "") + "\n", new UTF8Encoding(false));
+        File.WriteAllText(tmp, Json.Write(settings) + "\n", new UTF8Encoding(false));
         if (File.Exists(file))
             File.Replace(tmp, file, backup);
         else
@@ -222,66 +224,6 @@ static class ClaudeHooks
     {
         IList l = o as IList;
         return l == null ? null : l.Cast<object>().ToList();
-    }
-
-    static Dictionary<string, object> Parse(string text)
-    {
-        try
-        {
-            return new JavaScriptSerializer { MaxJsonLength = 8 << 20 }.DeserializeObject(text) as Dictionary<string, object>;
-        }
-        catch (ArgumentException) { return null; }
-        catch (InvalidOperationException) { return null; }
-    }
-
-    // Pretty JSON with two-space indents, the way Claude Code writes the file.
-    static string Json(object o, string indent)
-    {
-        string inner = indent + "  ";
-        Dictionary<string, object> d = o as Dictionary<string, object>;
-        if (d != null)
-        {
-            if (d.Count == 0)
-                return "{}";
-            return "{\n" + string.Join(",\n", d.Select(kv => inner + Quote(kv.Key) + ": " + Json(kv.Value, inner)).ToArray()) + "\n" + indent + "}";
-        }
-        IList l = o as IList;
-        if (l != null && !(o is string))
-        {
-            if (l.Count == 0)
-                return "[]";
-            return "[\n" + string.Join(",\n", l.Cast<object>().Select(v => inner + Json(v, inner)).ToArray()) + "\n" + indent + "]";
-        }
-        if (o == null)
-            return "null";
-        if (o is bool)
-            return (bool)o ? "true" : "false";
-        if (o is string)
-            return Quote((string)o);
-        return Convert.ToString(o, CultureInfo.InvariantCulture);
-    }
-
-    static string Quote(string s)
-    {
-        StringBuilder sb = new StringBuilder("\"");
-        foreach (char ch in s)
-        {
-            switch (ch)
-            {
-                case '"': sb.Append("\\\""); break;
-                case '\\': sb.Append("\\\\"); break;
-                case '\n': sb.Append("\\n"); break;
-                case '\r': sb.Append("\\r"); break;
-                case '\t': sb.Append("\\t"); break;
-                default:
-                    if (ch < 0x20)
-                        sb.Append("\\u").Append(((int)ch).ToString("x4"));
-                    else
-                        sb.Append(ch);
-                    break;
-            }
-        }
-        return sb.Append('"').ToString();
     }
 
     // The app is a windows exe without a console; borrow the one it was started from, if any.
