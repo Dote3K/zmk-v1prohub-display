@@ -22,16 +22,4 @@ sealed class View
     {
         return s.LayerName.Length > 0 ? s.LayerName : "Layer " + s.Layer;
     }
-
-    public static View Settled(Status s)
-    {
-        View v = new View();
-        v.Names.Add(new Name { Text = LayerLabel(s), Alpha = 1 });
-        v.Indicator = v.MaxLayer = s.Layer;
-        v.Mods = new float[] { s.Ctrl ? 1 : 0, s.Shift ? 1 : 0, s.Alt ? 1 : 0, s.Gui ? 1 : 0 };
-        v.BatteryLeft = s.BatteryLeft;
-        v.BatteryRight = s.BatteryRight;
-        v.Screen = s.Active ? 1 : 0;
-        return v;
-    }
 }

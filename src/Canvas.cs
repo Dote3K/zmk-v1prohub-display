@@ -95,11 +95,6 @@ sealed class Canvas : IDisposable
         return pixels;
     }
 
-    public void SavePng(string path)
-    {
-        bmp.Save(path, ImageFormat.Png);
-    }
-
     public void Dispose()
     {
         foreach (SolidBrush b in brushes.Values)

@@ -145,8 +145,7 @@ sealed class ClockScreen : IScreen
         return Draw(Style, DateTime.Now, Weather.Current, now, brightness, out next);
     }
 
-    // Also used for previews with a made-up time and weather (--clock-png).
-    public byte[] Draw(string style, DateTime t, WeatherNow w, double ms, float brightness, out double next)
+    byte[] Draw(string style, DateTime t, WeatherNow w, double ms, float brightness, out double next)
     {
         c.Clear();
         next = (60 - t.Second) * 1000 - t.Millisecond; // nothing but the pet changes before the next minute

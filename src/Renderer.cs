@@ -29,11 +29,6 @@ sealed class Renderer
         Keyboard = keyboardName;
     }
 
-    public byte[] Render(Status s)
-    {
-        return Render(View.Settled(s));
-    }
-
     public byte[] Render(View v)
     {
         c.Clear();
