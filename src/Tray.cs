@@ -95,29 +95,14 @@ sealed class Tray : IDisposable
         return item;
     }
 
-    void Change(Action<Config> edit)
+    static void Change(Action<Config> edit)
     {
-        Config c = manager.Config.Copy();
-        edit(c);
-        manager.Configure(c);
-        try
-        {
-            c.Save();
-        }
-        catch (IOException) { }               // still applied, just not remembered
-        catch (UnauthorizedAccessException) { }
+        Settings.Edit(edit);
     }
 
     static void OpenConfig()
     {
-        try
-        {
-            Process.Start(Config.FilePath);
-        }
-        catch (Win32Exception) // no program for .json
-        {
-            Process.Start("notepad.exe", "\"" + Config.FilePath + "\"");
-        }
+        Settings.Open(Config.FilePath);
     }
 
     // a tiny pixel Clawd on a dark tile

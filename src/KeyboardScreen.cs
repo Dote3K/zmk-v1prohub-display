@@ -45,6 +45,19 @@ sealed class KeyboardScreen : IScreen
         return false;
     }
 
+    public bool CanTakeover { get { return false; } }
+
+    const string DefaultName = "Cygnus";
+
+    public IList<Field> Fields()
+    {
+        return new List<Field>
+        {
+            Field.Text("name", "Keyboard name", "Shown in the top left corner of the keyboard screen.",
+                () => Settings.Option(Id, "name", DefaultName), v => Settings.SetOption(Id, "name", v.Trim())),
+        };
+    }
+
     public byte[] Render(double now, float brightness, out double next)
     {
         View v;
@@ -53,6 +66,7 @@ sealed class KeyboardScreen : IScreen
             moving = Step(now, out v);
         v.Screen = brightness;
         next = moving ? FrameMs : double.PositiveInfinity;
+        renderer.Keyboard = Settings.Option(Id, "name", DefaultName);
         return renderer.Render(v);
     }
 

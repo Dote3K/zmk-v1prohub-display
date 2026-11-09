@@ -94,15 +94,57 @@ static class ClaudeHooks
 
     // ---- settings.json ----
 
-    // Adds (or removes) the hooks and the status line in Claude Code's user settings. Everything else in
-    // the file is kept; a status line that is not ours is left alone. The old file is kept as a backup.
+    // --install-claude / --uninstall-claude from a terminal
     public static int Install(bool install)
     {
-        string exe = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+        string message;
+        bool ok = Apply(install, out message);
+        Print(message);
+        return ok ? 0 : 1;
+    }
+
+    // Claude Code's user settings file (CLAUDE_CONFIG_DIR moves it)
+    public static string SettingsFile()
+    {
         string dir = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
         if (string.IsNullOrEmpty(dir))
             dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
-        string file = Path.Combine(dir, "settings.json");
+        return Path.Combine(dir, "settings.json");
+    }
+
+    // Whether settings.json runs this app as a hook, and whether its status line is ours.
+    public static void Installed(out bool hooks, out bool statusLine)
+    {
+        hooks = statusLine = false;
+        Dictionary<string, object> settings = null;
+        try
+        {
+            if (File.Exists(SettingsFile()))
+                settings = Json.Parse(File.ReadAllText(SettingsFile(), Encoding.UTF8));
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        if (settings == null)
+            return;
+        Dictionary<string, object> h = settings.ContainsKey("hooks") ? settings["hooks"] as Dictionary<string, object> : null;
+        if (h != null)
+            foreach (object groups in h.Values)
+                foreach (object g in List(groups) ?? new List<object>())
+                {
+                    Dictionary<string, object> group = g as Dictionary<string, object>;
+                    if (group != null && group.ContainsKey("hooks") && (List(group["hooks"]) ?? new List<object>()).Any(IsOurHook))
+                        hooks = true;
+                }
+        Dictionary<string, object> status = settings.ContainsKey("statusLine") ? settings["statusLine"] as Dictionary<string, object> : null;
+        statusLine = status != null && IsOurs(status.ContainsKey("command") ? status["command"] as string : null, "--statusline");
+    }
+
+    // Adds (or removes) the hooks and the status line in Claude Code's user settings. Everything else in
+    // the file is kept; a status line that is not ours is left alone. The old file is kept as a backup.
+    public static bool Apply(bool install, out string message)
+    {
+        string exe = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+        string file = SettingsFile(), dir = Path.GetDirectoryName(file);
 
         Dictionary<string, object> settings = new Dictionary<string, object>();
         if (File.Exists(file))
@@ -113,8 +155,8 @@ static class ClaudeHooks
                 settings = Json.Parse(text);
                 if (settings == null)
                 {
-                    Print(file + " is not valid JSON; nothing changed.");
-                    return 1;
+                    message = file + " is not valid JSON; nothing changed.";
+                    return false;
                 }
             }
         }
@@ -123,8 +165,8 @@ static class ClaudeHooks
         Dictionary<string, object> hooks = settings.ContainsKey("hooks") ? settings["hooks"] as Dictionary<string, object> : null;
         if (hooks == null && settings.ContainsKey("hooks"))
         {
-            Print("\"hooks\" in " + file + " is not an object; nothing changed.");
-            return 1;
+            message = "\"hooks\" in " + file + " is not an object; nothing changed.";
+            return false;
         }
         // rebuilt rather than edited in place: a Dictionary reorders its keys after removals, and the
         // file should keep its order from one install to the next
@@ -199,9 +241,9 @@ static class ClaudeHooks
         else
             File.Move(tmp, file);
 
-        Print((install ? "Added the hub hooks to " : "Removed the hub hooks from ") + file + "." + statusNote +
-            (File.Exists(backup) ? " Previous file: " + backup : ""));
-        return 0;
+        message = (install ? "Added the hub hooks to " : "Removed the hub hooks from ") + file + "." + statusNote +
+            (File.Exists(backup) ? " Previous file: " + backup : "");
+        return true;
     }
 
     static bool IsOurHook(object h)

@@ -88,6 +88,7 @@ static class Program
         ClaudeSessions sessions = new ClaudeSessions();
         IScreen[] screens = { new ClaudeScreen(new ClaudeRenderer(canvas, Sprite.DefaultDir()), sessions) };
         manager = new ScreenManager(new KeyboardScreen(renderer), screens, Config.Load(), Push, SetScreen);
+        Settings.Init(manager);
         IDisposable watch = Config.Watch(c =>
         {
             if (c.ToJson() != manager.Config.ToJson()) // our own saves come back here too

@@ -16,6 +16,8 @@ sealed class Config
     public int RotateSeconds = 15;
     public string[] Takeover = { "claude" };             // may take the hub over while they have something urgent
     public bool LayerOverlay = true;                     // a layer or modifier change shows the keyboard for a moment
+    // each screen's own settings, by screen id (see Settings.Option)
+    public Dictionary<string, Dictionary<string, object>> Options = new Dictionary<string, Dictionary<string, object>>();
 
     public static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "zmk-hub-display");
     public static readonly string FilePath = Path.Combine(Dir, "config.json");
@@ -25,6 +27,7 @@ sealed class Config
         Config c = (Config)MemberwiseClone();
         c.Rotate = (string[])Rotate.Clone();
         c.Takeover = (string[])Takeover.Clone();
+        c.Options = Options.ToDictionary(kv => kv.Key, kv => new Dictionary<string, object>(kv.Value));
         return c;
     }
 
@@ -38,6 +41,7 @@ sealed class Config
             { "rotateSeconds", RotateSeconds },
             { "takeover", Takeover },
             { "layerOverlay", LayerOverlay },
+            { "options", Options.ToDictionary(kv => kv.Key, kv => (object)kv.Value) },
         }) + "\n";
     }
 
@@ -69,6 +73,10 @@ sealed class Config
                 c.Takeover = ((IList)o).OfType<string>().ToArray();
             if (d.TryGetValue("layerOverlay", out o) && o is bool)
                 c.LayerOverlay = (bool)o;
+            if (d.TryGetValue("options", out o) && o is Dictionary<string, object>)
+                foreach (KeyValuePair<string, object> kv in (Dictionary<string, object>)o)
+                    if (kv.Value is Dictionary<string, object>)
+                        c.Options[kv.Key] = (Dictionary<string, object>)kv.Value;
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

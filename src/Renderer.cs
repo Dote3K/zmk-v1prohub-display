@@ -20,13 +20,13 @@ sealed class Renderer
     readonly Font medium = new Font("Bahnschrift", 34, FontStyle.Bold, GraphicsUnit.Pixel);
     readonly StringFormat center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
     readonly StringFormat left = new StringFormat { LineAlignment = StringAlignment.Center };
-    readonly string keyboard;
+    public string Keyboard;  // name in the top left corner
 
     public Renderer(Canvas canvas, string keyboardName)
     {
         c = canvas;
         g = canvas.G;
-        keyboard = keyboardName;
+        Keyboard = keyboardName;
     }
 
     public byte[] Render(Status s)
@@ -40,7 +40,7 @@ sealed class Renderer
         if (v.Screen <= 0.004f)
             return c.ToRgb565(); // screen off: an all-black frame
 
-        g.DrawString(keyboard.ToUpperInvariant(), small, c.Brush(Dim), new RectangleF(10, 2, 200, 22), left);
+        g.DrawString(Keyboard.ToUpperInvariant(), small, c.Brush(Dim), new RectangleF(10, 2, 200, 22), left);
 
         // layer names, each at its own offset and opacity, clipped to the name area
         RectangleF nameArea = new RectangleF(0, 24, W, 62);
