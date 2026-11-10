@@ -180,7 +180,23 @@ sealed class ClockScreen : IScreen
         return c.ToRgb565();
     }
 
-    // What Clawd is up to: a birthday or holiday first, then the weather, then the time of day.
+    // What Clawd gets up to in each part of the day. Within a part it picks one of these and switches
+    // every 20 minutes; weekends trade work for play.
+    static readonly string[] Morning = { "coffee", "reading", "yoga" };
+    static readonly string[] Work = { "working-typing", "coding", "reading", "studying", "working-thinking", "idea", "working-rubber-duck", "music" };
+    static readonly string[] Play = { "gaming", "skateboard", "fishing", "camping", "gardening", "chef", "bowling", "painting", "music" };
+    static readonly string[] Lunch = { "eating", "chef", "ice-cream" };
+    static readonly string[] Snack = { "coffee", "ice-cream" };
+    static readonly string[] Evening = { "gaming", "dancing", "dj", "music", "podcast", "painting" };
+    static readonly string[] Night = { "reading", "studying", "podcast", "music" };
+    const int SwitchMinutes = 20;
+
+    // the keyboard, to wave when you come back after a while away
+    bool wasActive;
+    DateTime idleSince = DateTime.MinValue, waveUntil = DateTime.MinValue;
+
+    // What Clawd is up to: a birthday or holiday first, then the weather, then a wave when you are back
+    // at the keyboard, then whatever fits the hour.
     string PetFor(DateTime t, WeatherNow w)
     {
         string dm = t.ToString("dd-MM");
@@ -196,15 +212,57 @@ sealed class ClockScreen : IScreen
             if (w.Temp <= 12) return "winter";
             if (w.Temp >= 34) return "summer";
         }
+
+        Status k = keyboard();
+        bool active = k != null && k.Active;
+        if (active && !wasActive && idleSince != DateTime.MinValue && t - idleSince >= TimeSpan.FromMinutes(10))
+            waveUntil = t.AddMinutes(1);
+        if (!active && wasActive)
+            idleSince = t;
+        wasActive = active;
+        if (t < waveUntil) return "waving";
+
+        bool weekend = t.DayOfWeek == DayOfWeek.Saturday || t.DayOfWeek == DayOfWeek.Sunday;
         int m = t.Hour * 60 + t.Minute;
         if (m < 5 * 60) return "sleeping";
-        if (m < 9 * 60) return "coffee";
-        if (m < 12 * 60) return "working-typing";
-        if (m < 13 * 60 + 30) return "eating";
-        if (m < 18 * 60) return "working-typing";
-        if (m < 21 * 60) return "gaming";
-        if (m < 23 * 60) return "reading";
+        if (m < 9 * 60) return Pick(Morning, t);
+        if (m < 12 * 60) return Pick(weekend ? Play : Work, t);
+        if (m < 13 * 60 + 30) return Pick(Lunch, t);
+        if (!weekend && m >= 15 * 60 && m < 15 * 60 + SwitchMinutes) return Pick(Snack, t);
+        if (m < 18 * 60) return Pick(weekend ? Play : Work, t);
+        if (m < 21 * 60) return Pick(Evening, t);
+        if (m < 23 * 60) return Pick(Night, t);
         return "yawning";
+    }
+
+    // One of the pets, the same one for a whole 20-minute block of the day; pets that are missing from
+    // the pets folder are skipped.
+    string Pick(string[] pool, DateTime t)
+    {
+        List<string> there = new List<string>();
+        foreach (string p in pool)
+            if (Pet(p) != null)
+                there.Add(p);
+        if (there.Count == 0)
+            return pool[0];
+        int block = (t.Hour * 60 + t.Minute) / SwitchMinutes, day = t.Year * 1000 + t.DayOfYear, n = there.Count;
+        // walk the day's blocks, each step moving to one of the other pets: never the same twice in a row
+        int i = Shuffle(day, 0) % n;
+        for (int b = 1; b <= block && n > 1; b++)
+            i = (i + 1 + Shuffle(day, b) % (n - 1)) % n;
+        return there[i];
+    }
+
+    // a well-mixed number from the day and the block (nearby seeds of Random give nearby picks)
+    static int Shuffle(int day, int block)
+    {
+        uint x = (uint)(day * 131 + block);
+        x ^= x >> 16;
+        x *= 0x7feb352d;
+        x ^= x >> 15;
+        x *= 0x846ca68b;
+        x ^= x >> 16;
+        return (int)(x & 0x7fffffff);
     }
 
     Sprite Pet(string name)

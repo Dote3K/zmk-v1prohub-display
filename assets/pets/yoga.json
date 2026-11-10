@@ -1,0 +1,13 @@
+{
+  "name": "yoga",
+  "source": "clawd-pet@b208f0c/clawd-yoga.svg",
+  "frameWidth": 144,
+  "frameHeight": 136,
+  "columns": 10,
+  "frames": 60,
+  "frameMs": 66.67,
+  "loopMs": 4000,
+  "seamless": true,
+  "scale": 8,
+  "removedBackgrounds": 0
+}

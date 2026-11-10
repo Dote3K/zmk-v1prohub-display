@@ -16,6 +16,8 @@ sealed class ClaudeSessions
         public string Pet = "", State = "", Detail = "", Error = "";
         public double PromptAt = -1, PhaseAt, PetAt, LastAt, StopAt = double.NegativeInfinity, TurnMs;
         public int Tools;
+        public int Failures;            // tool calls failed in a row
+        public double Context = -1;     // % of the context window used, from the status line
     }
 
     const double StaleMs = 10 * 60000;       // thinking or working with no events: interrupted (Esc fires no Stop)
@@ -74,6 +76,7 @@ sealed class ClaudeSessions
                 case "UserPromptSubmit":
                     s.PromptAt = now;
                     s.Tools = 0;
+                    s.Failures = 0;
                     s.StopAt = double.NegativeInfinity;
                     Set(s, Phase.Thinking, "loading", "THINKING", OneLine(Str(e, "prompt")), now);
                     break;
@@ -85,8 +88,13 @@ sealed class ClaudeSessions
                     break;
                 case "PostToolUse":
                 case "PostToolUseFailure":
-                    if (!late && s.Phase == Phase.NeedsYou)
+                    if (late)
+                        break;
+                    if (s.Phase == Phase.NeedsYou)
                         Set(s, Phase.Working, s.Pet == "notification" ? "loading" : s.Pet, "WORKING", s.Detail, now); // permission answered
+                    s.Failures = name == "PostToolUseFailure" ? s.Failures + 1 : 0;
+                    if (s.Failures >= 2) // things keep going wrong: Clawd fights the fire
+                        Set(s, Phase.Working, "working-firefighting", "FIXING", s.Detail, now);
                     break;
                 case "PreCompact":
                     Set(s, Phase.Working, "working-context-full", "COMPACTING", "Summarizing the conversation", now);
@@ -133,10 +141,7 @@ sealed class ClaudeSessions
             case "PowerShell":
                 arg = Str(input, "command");
                 string c = arg.ToLowerInvariant();
-                pet = Regex.IsMatch(c, @"\btest|\bpytest|\bjest|\bvitest") ? "working-testing"
-                    : c.Contains("git push") ? "working-pushing"
-                    : c.Contains("git merge") || c.Contains("git rebase") ? "working-merging"
-                    : "working-typing";
+                pet = BashPet(c);
                 verb = "RUNNING";
                 break;
             case "Edit":
@@ -181,10 +186,35 @@ sealed class ClaudeSessions
                 verb = "WORKING";
                 break;
         }
+        // a plain command or tool gets a pet from how the turn is going
+        if (pet == "working-typing" || pet == "working-tool-calling")
+        {
+            if (s.Context >= 85)
+                pet = "working-overheated";
+            else if (s.PromptAt >= 0 && now - s.PromptAt > 10 * 60000)
+                pet = "working-oncall";
+            else if (s.Tools > 15)
+                pet = "working-juggling";
+        }
         // mcp__server__tool reads as just "tool"
         string label = tool.StartsWith("mcp__") ? tool.Substring(tool.LastIndexOf("__", StringComparison.Ordinal) + 2) : tool;
         arg = OneLine(arg);
         Set(s, Phase.Working, pet, verb, arg.Length > 0 ? label + " · " + arg : label, now);
+    }
+
+    // which pet acts a shell command out, by what the command does
+    static string BashPet(string c)
+    {
+        if (Regex.IsMatch(c, @"\btest|\bpytest|\bjest|\bvitest")) return "working-testing";
+        if (c.Contains("git push")) return "working-pushing";
+        if (c.Contains("git merge") || c.Contains("git rebase")) return "working-merging";
+        if (Regex.IsMatch(c, @"\b(npm|pnpm|yarn|bun) (i|install|add)\b|\bpip install|\bcargo add|\bdotnet add|\bwinget install")) return "working-carrying";
+        if (Regex.IsMatch(c, @"\bbuild\b|\bmake\b|\bcargo (build|run)|\bdotnet (build|run)|\bcsc\b|\btsc\b|\bgradle|\bmvn\b|\.cmd\b")) return "working-building";
+        if (Regex.IsMatch(c, @"\blint|\bformat\b|\bprettier|\beslint|\brm -|\bremove-item|\bclean\b")) return "working-sweeping";
+        if (Regex.IsMatch(c, @"\bdeploy|\bdocker\b|\bkubectl|\bgh release")) return "working-deploying";
+        if (Regex.IsMatch(c, @"^\s*(grep|rg|ls|cat|find|head|tail|sed -n|wc|tree|dir|get-childitem|select-string)\b|^\s*git (log|status|diff|show)\b")) return "detective";
+        if (Regex.IsMatch(c, @"^\s*(curl|wget|gh|invoke-webrequest)\b")) return "telescope";
+        return "working-typing";
     }
 
     static string ErrorPet(string error)
@@ -222,6 +252,10 @@ sealed class ClaudeSessions
         {
             statusAt = DateTime.UtcNow;
             statusHadLimits = e.ContainsKey("rate_limits");
+            Session s;
+            double used = Num(e, "context_window", "used_percentage");
+            if (!double.IsNaN(used) && sessions.TryGetValue(Str(e, "session_id"), out s))
+                s.Context = used;
             if (!double.IsNaN(used5h))
             {
                 quota5h = used5h;

@@ -1,0 +1,13 @@
+{
+  "name": "idea",
+  "source": "clawd-pet@b208f0c/clawd-idea.svg",
+  "frameWidth": 90,
+  "frameHeight": 130,
+  "columns": 10,
+  "frames": 90,
+  "frameMs": 66.67,
+  "loopMs": 6000,
+  "seamless": true,
+  "scale": 5,
+  "removedBackgrounds": 0
+}

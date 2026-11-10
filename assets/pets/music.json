@@ -1,0 +1,13 @@
+{
+  "name": "music",
+  "source": "clawd-pet@b208f0c/clawd-music.svg",
+  "frameWidth": 115,
+  "frameHeight": 145,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": true,
+  "scale": 5,
+  "removedBackgrounds": 0
+}

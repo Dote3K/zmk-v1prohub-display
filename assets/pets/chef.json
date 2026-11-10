@@ -1,0 +1,13 @@
+{
+  "name": "chef",
+  "source": "clawd-pet@b208f0c/clawd-chef.svg",
+  "frameWidth": 132,
+  "frameHeight": 114,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

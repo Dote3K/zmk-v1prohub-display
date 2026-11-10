@@ -1,0 +1,13 @@
+{
+  "name": "working-sweeping",
+  "source": "clawd-pet@b208f0c/clawd-working-sweeping.svg",
+  "frameWidth": 150,
+  "frameHeight": 96,
+  "columns": 10,
+  "frames": 23,
+  "frameMs": 65.22,
+  "loopMs": 1500,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

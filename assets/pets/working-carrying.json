@@ -1,0 +1,13 @@
+{
+  "name": "working-carrying",
+  "source": "clawd-pet@b208f0c/clawd-working-carrying.svg",
+  "frameWidth": 140,
+  "frameHeight": 90,
+  "columns": 10,
+  "frames": 30,
+  "frameMs": 66.67,
+  "loopMs": 2000,
+  "seamless": false,
+  "scale": 5,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "waving",
+  "source": "clawd-pet@b208f0c/clawd-waving.svg",
+  "frameWidth": 136,
+  "frameHeight": 104,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": false,
+  "scale": 8,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "working-overheated",
+  "source": "clawd-pet@b208f0c/clawd-working-overheated.svg",
+  "frameWidth": 138,
+  "frameHeight": 66,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": false,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "skateboard",
+  "source": "clawd-pet@b208f0c/clawd-skateboard.svg",
+  "frameWidth": 132,
+  "frameHeight": 90,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": false,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

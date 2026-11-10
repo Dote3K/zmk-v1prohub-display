@@ -1,0 +1,13 @@
+{
+  "name": "gardening",
+  "source": "clawd-pet@b208f0c/clawd-gardening.svg",
+  "frameWidth": 144,
+  "frameHeight": 78,
+  "columns": 10,
+  "frames": 60,
+  "frameMs": 66.67,
+  "loopMs": 4000,
+  "seamless": false,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "fishing",
+  "source": "clawd-pet@b208f0c/clawd-fishing.svg",
+  "frameWidth": 141,
+  "frameHeight": 60,
+  "columns": 10,
+  "frames": 75,
+  "frameMs": 66.67,
+  "loopMs": 5000,
+  "seamless": false,
+  "scale": 3,
+  "removedBackgrounds": 0
+}

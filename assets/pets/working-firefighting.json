@@ -1,0 +1,13 @@
+{
+  "name": "working-firefighting",
+  "source": "clawd-pet@b208f0c/clawd-working-firefighting.svg",
+  "frameWidth": 144,
+  "frameHeight": 96,
+  "columns": 10,
+  "frames": 36,
+  "frameMs": 66.67,
+  "loopMs": 2400,
+  "seamless": true,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "working-rubber-duck",
+  "source": "clawd-pet@b208f0c/clawd-working-rubber-duck.svg",
+  "frameWidth": 150,
+  "frameHeight": 78,
+  "columns": 10,
+  "frames": 45,
+  "frameMs": 66.67,
+  "loopMs": 3000,
+  "seamless": false,
+  "scale": 6,
+  "removedBackgrounds": 0
+}

@@ -1,0 +1,13 @@
+{
+  "name": "dj",
+  "source": "clawd-pet@b208f0c/clawd-dj.svg",
+  "frameWidth": 130,
+  "frameHeight": 70,
+  "columns": 10,
+  "frames": 60,
+  "frameMs": 66.67,
+  "loopMs": 4000,
+  "seamless": true,
+  "scale": 5,
+  "removedBackgrounds": 0
+}

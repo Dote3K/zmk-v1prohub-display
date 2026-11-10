@@ -1,0 +1,13 @@
+{
+  "name": "studying",
+  "source": "clawd-pet@b208f0c/clawd-studying.svg",
+  "frameWidth": 140,
+  "frameHeight": 65,
+  "columns": 10,
+  "frames": 30,
+  "frameMs": 66.67,
+  "loopMs": 2000,
+  "seamless": true,
+  "scale": 5,
+  "removedBackgrounds": 0
+}

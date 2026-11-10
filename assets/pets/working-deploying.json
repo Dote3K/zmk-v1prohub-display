@@ -1,0 +1,13 @@
+{
+  "name": "working-deploying",
+  "source": "clawd-pet@b208f0c/clawd-working-deploying.svg",
+  "frameWidth": 92,
+  "frameHeight": 144,
+  "columns": 10,
+  "frames": 30,
+  "frameMs": 66.67,
+  "loopMs": 2000,
+  "seamless": true,
+  "scale": 4,
+  "removedBackgrounds": 0
+}
